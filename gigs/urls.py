@@ -1,7 +1,5 @@
 from django.urls import path, reverse_lazy
 from django.contrib.auth import views as auth_views
-from django.conf import settings
-from django.conf.urls.static import static
 
 from gigs import views
 
@@ -122,4 +120,4 @@ urlpatterns = [
         name='password_reset_complete',
     ),
 
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+]
