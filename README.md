@@ -20,9 +20,9 @@ A Django web app where bands post gigs and musicians find, apply for and review 
 - Musicians apply to a gig, withdraw, and bookmark gigs for later.
 - Bands create and delete their own listings from a dashboard.
 - Bands browse musicians (filter by instrument) and send them a reach-out message. Musicians read and delete these in an inbox.
-- Reviews between musicians and bands, tied to a gig, with a rating from 0 to 5 and a community badge based on review count.
+- Reviews between musicians and bands, tied to a gig, with a rating from 1 to 5 and a community badge based on review count.
 - Editable profiles: bio, picture, instruments, age and media links. Account deletion.
-- Demo data script that seeds 10 bands, 30 musicians, gigs, applications and reviews.
+- Demo data script that seeds 10 bands, 30 musicians, gigs, applications and reviews. Only two seeded accounts can log in; the rest have unusable passwords.
 
 ## How it works
 
@@ -63,7 +63,7 @@ python population_script.py        # optional demo data
 python manage.py runserver
 ```
 
-Open http://127.0.0.1:8000/. With demo data, log in as `musician_1` or `band_user_1`, password `Password123!`.
+Open http://127.0.0.1:8000/. With demo data, log in as the demo musician `musician_1` or the demo band `band_user_1`, password `Password123!`. Demo data is reset on each deploy.
 
 Settings come from environment variables or `.env` (see `.env.example`):
 
@@ -72,16 +72,19 @@ Settings come from environment variables or `.env` (see `.env.example`):
 | `DJANGO_SECRET_KEY` | Required. |
 | `DEBUG` | `true` for local development. Defaults to false. |
 | `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` | Comma-separated lists. |
+| `BEHIND_PROXY` | `true` behind a TLS-terminating proxy such as Render. Trusts `X-Forwarded-Proto`. |
+| `SERVE_MEDIA` | `true` to serve uploaded profile pictures through Django when `DEBUG=false`. Demo only: the files sit on the host's disk, which is ephemeral on Render. |
+| `SECURE_SSL` | Defaults to true when `DEBUG=false`: secure cookies, HTTPS redirect and a one-hour HSTS header. Set `false` to run a production-mode build over plain http locally. |
 | `GOOGLE_MAPS_FRONTEND_KEY`, `GOOGLE_MAPS_BACKEND_KEY` | Optional. Enable maps and geocoding. |
 | `EMAIL_USER`, `EMAIL_PASS` | Optional. Without them reset emails print to the console. |
 
-The demo script downloads profile pictures from picsum.photos and skips them if offline. It only seeds an empty database. Use `python population_script.py --reset` to delete all non-admin users and reseed.
+The demo script downloads profile pictures from picsum.photos and skips them if offline. It only seeds when no non-admin users exist, so it never deletes real accounts by accident. Use `python population_script.py --reset` to delete all non-admin users and reseed.
 
-With `DEBUG=false`, run `python manage.py collectstatic --noinput` first, then serve with `gunicorn find_my_gig.wsgi`. `render.yaml` describes this setup for Render.
+With `DEBUG=false`, run `python manage.py collectstatic --noinput` first (static files are hashed and compressed by WhiteNoise), set `SECURE_SSL=false` if you are not behind HTTPS, then serve with `gunicorn find_my_gig.wsgi`. `render.yaml` describes this setup for Render.
 
 ## Tests
 
-57 tests: `python manage.py test` (needs `DJANGO_SECRET_KEY` set). Tests cover models, URL routing, views and the geocoding fallback. They do not call the Google API.
+71 tests: `python manage.py test` (needs `DJANGO_SECRET_KEY` set). Tests cover models, URL routing, views, the geocoding lifecycle, malformed requests, duplicate applications and the demo-data guard. They do not call the Google API.
 
 ## Team and my role
 
@@ -101,7 +104,7 @@ Ross wrote most of the first templates, JavaScript and UI fixes. Cruz wrote the 
 
 ## Limitations and next steps
 
-- SQLite on Render's free tier is not persistent. The demo data is reseeded on each deploy.
+- SQLite and uploaded media live on Render's ephemeral disk. Everything resets on each deploy and restart, which is fine for a demo but not for real use.
 - Bootstrap loads from a CDN, so the pages are unstyled offline.
 - Interactions use JSON endpoints with hand-written `fetch` code and no API documentation.
 - No pagination on listings, and no notification when a band reviews a musician or a gig changes.
