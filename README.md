@@ -4,7 +4,6 @@ A Django web app where bands post gigs and musicians find, apply for and review 
 
 ![Gig listings page](docs/images/listings.png)
 
-**Live demo:** coming soon
 
 ## Why it is useful
 
