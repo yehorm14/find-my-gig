@@ -13,18 +13,24 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 from pathlib import Path
 import os
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
+
 load_dotenv()
+
+
+def env_list(name, default=''):
+    """Read a comma-separated environment variable into a list."""
+    return [item.strip() for item in os.environ.get(name, default).split(',') if item.strip()]
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-#change the hardcoded url mapping
 LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/dashboard/'
 LOGOUT_REDIRECT_URL = '/'
 
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
@@ -32,21 +38,41 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_USER')
 
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_PASS')
 
+# Password-reset emails go through SMTP when credentials are set,
+# otherwise they are printed to the console.
+if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
+
+# All deployment-specific values come from environment variables
+# (or a local .env file, see .env.example).
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'REDACTED_DJANGO_SECRET_KEY'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', '')
+if not SECRET_KEY:
+    raise ImproperlyConfigured(
+        'DJANGO_SECRET_KEY is not set. Copy .env.example to .env and set it, '
+        'or export it in your shell. Generate one with: '
+        "python -c \"from django.core.management.utils import get_random_secret_key; "
+        "print(get_random_secret_key())\""
+    )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = os.environ.get('DEBUG', 'false').strip().lower() in ('1', 'true', 'yes', 'on')
 
-ALLOWED_HOSTS = [
-    '127.0.0.1', 
-    'localhost', 
-    'abaig01.pythonanywhere.com',  
-]
+ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', '127.0.0.1,localhost' if DEBUG else '')
+CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS')
+
+# Render sets this automatically for web services.
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if RENDER_EXTERNAL_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
+    CSRF_TRUSTED_ORIGINS.append(f'https://{RENDER_EXTERNAL_HOSTNAME}')
+
+# Behind a TLS-terminating proxy (Render) the original scheme arrives in this header.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
 # Application definition
@@ -63,6 +89,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -141,6 +168,7 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles'  # target of `collectstatic`, served by WhiteNoise
 
 # Media Files
 MEDIA_URL = '/media/'
@@ -151,5 +179,6 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-GOOGLE_MAPS_FRONTEND_KEY = os.environ.get('GOOGLE_MAPS_FRONTEND_KEY')
-GOOGLE_MAPS_BACKEND_KEY = os.environ.get('GOOGLE_MAPS_BACKEND_KEY')
+# Optional. Without these keys geocoding is skipped and maps show a placeholder.
+GOOGLE_MAPS_FRONTEND_KEY = os.environ.get('GOOGLE_MAPS_FRONTEND_KEY') or None
+GOOGLE_MAPS_BACKEND_KEY = os.environ.get('GOOGLE_MAPS_BACKEND_KEY') or None
