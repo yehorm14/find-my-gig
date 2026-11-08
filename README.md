@@ -1,126 +1,115 @@
-# Find My Gig - Team 1E
+# Find My Gig
 
-Welcome to the Find My Gig repository. The objective of our application is to give musicians and bands a place to connect, collaborate, and fill open gig opportunities near them.
+A Django web app where bands post gigs and musicians find, apply for and review them.
 
-## Tech Stack
-* **Backend:** Django 4.2 LTS (Python 3.11)
-* **Frontend:** HTML, CSS, JavaScript (AJAX)
-* **Database:** SQLite (Default Django)
-* **APIs:** Google Maps API
+![Gig listings page](docs/images/listings.png)
 
----
+**Live demo:** coming soon
 
-## Local Setup Instructions (VS Code)
+## Why it is useful
 
-To start working on the project, follow these steps exactly. Make sure you have Python 3.11 and VS Code installed on your computer first.
+- Bands get one place to post open spots with the instrument needed, location and deadline.
+- Musicians can filter open gigs by instrument and date instead of scrolling through social media groups.
+- Bands can browse musicians and contact them directly.
+- Reviews on both sides give each profile a track record.
 
-### 1. Clone the Repository
-Open your VS Code terminal (Command Prompt) and run:
+## Features
+
+- Two account types, musician and band, with sign-up, login, logout and email password reset.
+- Gig listings with instrument filter, date filter and sort by name or deadline.
+- Gig detail page with a Google Map of the venue.
+- Musicians apply to a gig, withdraw, and bookmark gigs for later.
+- Bands create and delete their own listings from a dashboard.
+- Bands browse musicians (filter by instrument) and send them a reach-out message. Musicians read and delete these in an inbox.
+- Reviews between musicians and bands, tied to a gig, with a rating from 0 to 5 and a community badge based on review count.
+- Editable profiles: bio, picture, instruments, age and media links. Account deletion.
+- Demo data script that seeds 10 bands, 30 musicians, gigs, applications and reviews.
+
+## How it works
+
+Server-rendered Django app with one app, `gigs`.
+
+- `models.py`: `Musician`, `Band`, `Listing`, `Application`, `Review`, `MediaLink`, `BandInterest`.
+- `views.py`: page views plus small JSON endpoints for apply, withdraw, bookmark, create listing and reach-out. The browser calls them with `fetch` from the scripts in `static/find_my_gig/js/`.
+- `Listing.save()` geocodes the location through the Google Geocoding API and stores latitude and longitude. The map on the gig page reads those values.
+- Without Google Maps keys the app still runs: geocoding is skipped and maps show a placeholder.
+- WhiteNoise serves static files in production. Uploaded profile pictures are served by Django when `DEBUG=true`.
+- Database: SQLite.
+
+## Tech stack
+
+- Backend: Python, Django 4.2, SQLite
+- Frontend: Django templates, Bootstrap 5 (CDN), vanilla JavaScript
+- APIs: Google Maps JavaScript and Geocoding (optional)
+- Serving: gunicorn, WhiteNoise
+- CI and deploy: GitHub Actions (Python 3.12), Render
+
+## Run locally
+
+Needs Python 3.12 or newer.
+
 ```bash
-git clone [https://github.com/YOUR-USERNAME/Find_My_Gig.git](https://github.com/YOUR-USERNAME/Find_My_Gig.git)
-cd Find_My_Gig
-```
-
-### 2. Set Up Your Virtual Environment
-We use a virtual environment to make sure everyone is using the exact same versions of our packages and to avoid conflicts.
-* **Mac/Linux:** `python3 -m venv gig_env`
-* **Windows:** `python -m venv gig_env`
-
-### 3. Activate the Virtual Environment
-You must do this every time you open the project in VS Code.
-* **Mac/Linux:** `source gig_env/bin/activate`
-* **Windows:** `gig_env\Scripts\activate`
-*(You will know it worked if you see `(gig_env)` at the start of your terminal line).*
-
-### 4. Install the Dependencies
-Now, install our specific version of Django and our other packages:
-```bash
+git clone https://github.com/yehorm14/find-my-gig
+cd find-my-gig
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-```
 
-### 5. Run the Server
-To test that everything is working, start up the local development server:
-```bash
+cp .env.example .env
+# Put a generated key into DJANGO_SECRET_KEY in .env:
+python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+
+python manage.py migrate
+python population_script.py        # optional demo data
 python manage.py runserver
 ```
-*(Open your browser and go to http://127.0.0.1:8000/ to see the site).*
 
----
+Open http://127.0.0.1:8000/. With demo data, log in as `musician_1` or `band_user_1`, password `Password123!`.
 
-## 🛠️ Our Team's Git Workflow
+Settings come from environment variables or `.env` (see `.env.example`):
 
-Because our `main` branch is mechanically protected, **nobody is allowed to push directly to main.** All work must be done on personal feature branches and approved via Pull Requests (PRs). 
+| Variable | Purpose |
+| --- | --- |
+| `DJANGO_SECRET_KEY` | Required. |
+| `DEBUG` | `true` for local development. Defaults to false. |
+| `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` | Comma-separated lists. |
+| `GOOGLE_MAPS_FRONTEND_KEY`, `GOOGLE_MAPS_BACKEND_KEY` | Optional. Enable maps and geocoding. |
+| `EMAIL_USER`, `EMAIL_PASS` | Optional. Without them reset emails print to the console. |
 
-Please follow these exact steps to ensure we don't overwrite each other's code or create massive merge conflicts!
+The demo script downloads profile pictures from picsum.photos and skips them if offline. It only seeds an empty database. Use `python population_script.py --reset` to delete all non-admin users and reseed.
 
-### 1. Starting a New Task
-Never create a new branch from an outdated blueprint. Always update your local `main` first.
-```bash
-# 1. Switch to your local main branch
-git switch main
+With `DEBUG=false`, run `python manage.py collectstatic --noinput` first, then serve with `gunicorn find_my_gig.wsgi`. `render.yaml` describes this setup for Render.
 
-# 2. Download the absolute newest code from GitHub
-git pull origin main
+## Tests
 
-# 3. Create a new task branch (-c stands for create) and switch to it
-git switch -c your-descriptive-branch-name
-```
+57 tests: `python manage.py test` (needs `DJANGO_SECRET_KEY` set). Tests cover models, URL routing, views and the geocoding fallback. They do not call the Google API.
 
-### 2. Saving and Pushing Your Work
-Commit often! Once your feature is working locally, push it up to GitHub.
-```bash
-# 1. Stage all your changed files
-git add .
+## Team and my role
 
-# 2. Save them with a clear, descriptive message
-git commit -m "feat: Describe what you added or fixed here"
+Built as a team project for the University of Glasgow Web App Development course (2026), January to March 2026. This repository is Yehor Mykhailov's maintained copy of the team repository.
 
-# 3. Push your branch to GitHub (use -u ONLY the very first time you push a new branch)
-git push -u origin your-descriptive-branch-name
-```
+Team, as named in the commit history: Yehor Mykhailov (`yehorm14`), Ross, Cruz, Akif Baig (`AkifBaig01`), Mackenzie Trafford (`mushypea`).
 
-### 3. ⚠️ IMPORTANT: Updating an Active Branch
-If a teammate just merged their code into `main`, your active feature branch is now out of date! **You MUST pull their new code into your workspace before you open a Pull Request.**
+What Yehor built:
 
-```bash
-# 1. Save whatever you are currently working on
-git add .
-git commit -m "chore: save progress before pulling updated main"
+- About 70% of the surviving application code by `git blame` (about 3,900 of 5,400 lines in `gigs/`, `templates/`, `static/`, project settings and the population script, excluding migrations). He also has the largest share of lines added over the history. By commit count Ross has the most (57 non-merge commits against 47 for Yehor), mostly template and UI fixes.
+- `gigs/views.py` (about two thirds of the lines): listings, filters, dashboards, apply, bookmark, reach-out and review logic.
+- `gigs/models.py` additions, including Google Maps geocoding and mini-maps, plus forms and URL routing.
+- The demo data script, most of the test suite, and the template and CSS refactor.
+- Later cleanup in this copy: configuration from environment variables, static file serving, optional Maps keys, CI and deployment config.
 
-# 2. Switch to your local main branch
-git switch main
+Ross wrote most of the first templates, JavaScript and UI fixes. Cruz wrote the first models and the login, logout and password reset flows. Akif Baig added URL and form work. Mackenzie Trafford contributed CSS.
 
-# 3. Download the new code from GitHub
-git pull origin main
+## Limitations and next steps
 
-# 4. Switch back to your active feature branch
-git switch your-descriptive-branch-name
+- SQLite on Render's free tier is not persistent. The demo data is reseeded on each deploy.
+- Bootstrap loads from a CDN, so the pages are unstyled offline.
+- Interactions use JSON endpoints with hand-written `fetch` code and no API documentation.
+- No pagination on listings, and no notification when a band reviews a musician or a gig changes.
 
-# 5. Inject the newly updated main code into your workspace
-git merge main
-```
-*(Note: If step 5 causes a Merge Conflict, open the conflicting files in your VS Code editor, choose which code to keep, save the file, and run `git commit -am "Resolved merge conflicts"`).*
+## Credits / Licence
 
-### 4. 🚑 Emergency Tip: Undoing Mistakes
-If you accidentally save or delete code in a file and want to throw away your local changes to go back to the last committed version, do not use checkout! Use restore:
-```bash
-git restore name_of_the_broken_file.py
-```
-
-### 5. Opening a Pull Request
-Once your code is pushed and your branch is fully up-to-date with `main`:
-1. Go to our repository on GitHub.
-2. Click the green **Compare & pull request** button next to your branch.
-3. Leave a brief description of what you built.
-4. Ask a teammate to review and approve your code. Once approved, click **Merge**!
-
----
-
-### External Sources & Acknowledgments
-
-* **Mapping:** Google Maps API (used for both frontend dynamic map rendering and backend geocoding for gig locations).
-* **Styling:** Bootstrap 5 (Responsive CSS framework used for the core UI, grid layouts, and dark-mode styling).
-* **Icons/Images:** * Bootstrap Icons (used for the interactive star-rating UI in the review forms).
-  * Picsum Photos API (`https://picsum.photos/`) (used in `population_script.py` to automatically fetch and generate dummy profile pictures for testing).
-* **Other Python Libraries:** * `requests` (Used for backend API communication).
-  * `Pillow` (Required by Django for processing and saving uploaded `ImageField` media).
+- Google Maps JavaScript and Geocoding APIs.
+- Bootstrap 5 and Bootstrap Icons.
+- Demo profile pictures from picsum.photos.
+- No licence file is included. All rights reserved by the authors.
