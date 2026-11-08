@@ -5,10 +5,11 @@ applications and reviews. Profile pictures are downloaded from picsum.photos
 
 Run after `python manage.py migrate`:
 
-    python population_script.py            # seeds only an empty database
+    python population_script.py            # seeds only if no non-admin users exist
     python population_script.py --reset    # deletes all non-admin users first
 
-Seeded users share the password 'Password123!' (e.g. musician_1, band_user_1).
+Only two seeded accounts can log in: band_user_1 and musician_1, both with the
+password 'Password123!'. All other seeded users get unusable passwords.
 Demo use only.
 """
 import argparse
@@ -33,6 +34,9 @@ from gigs.models import Musician, Band, Listing, Review, Application, MediaLink,
 # ==========================================
 # 1. HELPER DATA & FUNCTIONS
 # ==========================================
+DEMO_USERNAMES = {"band_user_1", "musician_1"}
+DEMO_PASSWORD = "Password123!"
+
 INSTRUMENTS = ['Guitar', 'Bass', 'Drums', 'Vocals', 'Keys/Synth', 'Other']
 
 UK_VENUES = [
@@ -154,8 +158,8 @@ def clear_media():
 # 2. POPULATION SCRIPT
 # ==========================================
 def populate(reset=False):
-    if Band.objects.exists() and not reset:
-        print("Database already has data; skipping. Use --reset to wipe and reseed.")
+    if User.objects.filter(is_superuser=False).exists() and not reset:
+        print("Database already has users; skipping. Use --reset to wipe them and reseed.")
         return
 
     clear_data()
@@ -172,7 +176,11 @@ def populate(reset=False):
         band_name = BAND_NAMES[i]
         home_base = random.choice(UK_VENUES)
         
-        user = User.objects.create_user(username=username, email=f"{username}@test.com", password="Password123!")
+        user = User.objects.create_user(username=username, email=f"{username}@test.com")
+        if username in DEMO_USERNAMES:
+            user.set_password(DEMO_PASSWORD)
+        else:
+            user.set_unusable_password()
         user.first_name = "Band"
         user.last_name = f"Manager {i+1}"
         user.save()
@@ -199,7 +207,11 @@ def populate(reset=False):
     for i in range(30):
         username = f"musician_{i+1}"
         
-        user = User.objects.create_user(username=username, email=f"{username}@test.com", password="Password123!")
+        user = User.objects.create_user(username=username, email=f"{username}@test.com")
+        if username in DEMO_USERNAMES:
+            user.set_password(DEMO_PASSWORD)
+        else:
+            user.set_unusable_password()
         user.first_name = f"Talent"
         user.last_name = f"Num{i+1}"
         user.save()
@@ -279,7 +291,7 @@ def populate(reset=False):
     print("  - Applications and Reviews generated successfully.")
 
     print("\nPOPULATION COMPLETE! ")
-    print("Log in with any username (e.g., 'musician_1' or 'band_user_1') and password: Password123!")
+    print("Demo logins: band_user_1 or musician_1, password: Password123!")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Seed the database with demo data.')

@@ -100,27 +100,40 @@ class Listing(models.Model):
     bookmarks = models.ManyToManyField(User, related_name='saved_gigs', blank=True)
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
+    # The location string the stored coordinates belong to. Prevents re-geocoding
+    # on every save and detects when the location text has been edited.
+    geocoded_location = models.CharField(max_length=100, blank=True, default='', editable=False)
 
     def save(self, *args, **kwargs):
         """
         Overrides the default save method to automatically fetch 
         and save latitude and longitude using the Google Maps API.
         """
-        if self.location and not self.latitude:
-            self._geocode()
+        if self.location and self.location != self.geocoded_location:
+            if self.geocoded_location == '' and self.latitude is not None:
+                # Coordinates were supplied explicitly (e.g. seed data): keep them.
+                self.geocoded_location = self.location
+            else:
+                self._geocode()
 
         super().save(*args, **kwargs)
 
     def _geocode(self):
         """
-        Look up latitude/longitude for self.location. Does nothing when no
-        backend API key is configured. Failures are logged, never raised,
-        so saving a listing always works.
+        Look up latitude/longitude for self.location and remember which
+        location string was looked up. Does nothing when no backend API key
+        is configured (so a key added later still works). Failures are
+        logged, never raised, so saving a listing always works.
         """
         api_key = settings.GOOGLE_MAPS_BACKEND_KEY
         if not api_key:
             logger.info("GOOGLE_MAPS_BACKEND_KEY not set; skipping geocoding for '%s'", self.location)
             return
+
+        # Old coordinates belong to the old location text.
+        self.latitude = None
+        self.longitude = None
+        self.geocoded_location = self.location
 
         try:
             response = requests.get(
@@ -153,6 +166,11 @@ class Application(models.Model):
     listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name="applications_received")
     date_applied = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, default='Pending')
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['applicant', 'listing'], name='unique_application_per_listing'),
+        ]
 
     def __str__(self):
         return f"{self.applicant.username} applied to {self.listing.title}"

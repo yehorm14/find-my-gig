@@ -6,7 +6,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.http import JsonResponse
 from django.conf import settings
-from django.db import transaction
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from django.contrib.auth import login, logout
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
@@ -437,25 +438,30 @@ def create_gig_listing(request):
         if not hasattr(request.user, 'band'):
             return json_error('not_a_band')
 
-        data = json.loads(request.body)
-        title = data.get('title', '').strip()
-        req_instruments = data.get('req_instruments', '').strip()
+        data = parse_json_body(request)
+        if data is None:
+            return json_error('invalid_json')
+        title = str(data.get('title', '')).strip()
+        req_instruments = str(data.get('req_instruments', '')).strip()
         deadline = data.get('date', '')
-        description = data.get('description', '').strip()
-        location = data.get('location', '').strip()
+        description = str(data.get('description', '')).strip()
+        location = str(data.get('location', '')).strip()
 
         if not all([title, req_instruments, deadline, description, location]):
             return json_error('missing_fields')
 
-        listing = Listing.objects.create(
-            band=request.user.band,
-            title=title,
-            req_instruments=req_instruments,
-            deadline=deadline,
-            description=description,
-            location=location,
-            is_urgent=False
-        )
+        try:
+            listing = Listing.objects.create(
+                band=request.user.band,
+                title=title,
+                req_instruments=req_instruments,
+                deadline=deadline,
+                description=description,
+                location=location,
+                is_urgent=False
+            )
+        except (ValidationError, ValueError):
+            return json_error('invalid_data')
 
         return JsonResponse({
             'success': True,
@@ -476,6 +482,8 @@ def create_gig_listing(request):
 def delete_listing(request, listing_id):
     """Allows a Band to delete their own listing."""
     if request.method == 'POST':
+        if not hasattr(request.user, 'band'):
+            return json_error('not_a_band')
         try:
             listing = Listing.objects.get(id=listing_id, band=request.user.band)
             listing.delete()
@@ -493,6 +501,15 @@ def json_error(error):
 def json_success(**extra):
     """Standard success payload for the AJAX endpoints."""
     return JsonResponse({'success': True, **extra})
+
+
+def parse_json_body(request):
+    """Return the decoded JSON object in the request body, or None if it is malformed."""
+    try:
+        data = json.loads(request.body)
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def listing_action(view_func):
@@ -518,7 +535,12 @@ def apply_gig(request, listing):
     if Application.objects.filter(applicant=request.user, listing=listing).exists():
         return json_error('already_applied')
 
-    Application.objects.create(applicant=request.user, listing=listing)
+    try:
+        with transaction.atomic():
+            Application.objects.create(applicant=request.user, listing=listing)
+    except IntegrityError:
+        # Lost a race with a concurrent identical request.
+        return json_error('already_applied')
     return json_success()
 
 
@@ -615,8 +637,10 @@ def send_interest(request, musician_id):
 
         band = request.user.band
         musician = get_object_or_404(Musician, id=musician_id)
-        data = json.loads(request.body)
-        message = data.get('message', '').strip()
+        data = parse_json_body(request)
+        if data is None:
+            return json_error('invalid_json')
+        message = str(data.get('message', '')).strip()
 
         if not message:
             return json_error('Message cannot be empty.')
