@@ -36,7 +36,7 @@
                 </div>
 
                 <div class="col-md-4 mb-4 mb-md-0">
-                    {% if application.listing.latitude and application.listing.longitude %}
+                    {% if google_maps_frontend_key and application.listing.latitude and application.listing.longitude %}
                         <div class="gig-mini-map rounded" 
                              id="map-{{ application.listing.id }}"
                              data-lat="{{ application.listing.latitude|safe }}" 
@@ -47,7 +47,7 @@
                     {% else %}
                         <div class="map-placeholder rounded d-flex flex-column align-items-center justify-content-center" style="height: 160px; width: 100%;">
                             <h2 class="mb-0">🗺️</h2>
-                            <p class="text-muted small mt-1 mb-0">Coordinates pending</p>   
+                            <p class="text-muted small mt-1 mb-0">{% if google_maps_frontend_key %}Coordinates pending{% else %}Map not configured{% endif %}</p>   
                         </div>
                     {% endif %}
                 </div>
@@ -80,5 +80,7 @@
 {% block scripts_block %}
     <script src="{% static 'find_my_gig/js/dashboard.js' %}"></script>
     <script src="{% static 'find_my_gig/js/gigs.js' %}"></script> 
-    <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_frontend_key }}&callback=initMap"></script>
+    {% if google_maps_frontend_key %} 
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_frontend_key }}&callback=initMap"></script> 
+    {% endif %}
 {% endblock %}

@@ -8,6 +8,9 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 
 logger = logging.getLogger(__name__)
 
+GEOCODE_URL = 'https://maps.googleapis.com/maps/api/geocode/json'
+GEOCODE_TIMEOUT_SECONDS = 5
+
 # ==========================================
 # MIXINS & ABSTRACT CLASSES
 # ==========================================
@@ -104,27 +107,38 @@ class Listing(models.Model):
         and save latitude and longitude using the Google Maps API.
         """
         if self.location and not self.latitude:
-            try:
-                api_key = settings.GOOGLE_MAPS_BACKEND_KEY
-                url = (
-                    f"https://maps.googleapis.com/maps/api/geocode/json"
-                    f"?address={self.location}&key={api_key}"
-                )
-                
-                response = requests.get(url, timeout=5).json()
-
-                if response.get('status') == 'OK':
-                    geometry = response['results'][0]['geometry']['location']
-                    self.latitude = geometry['lat']
-                    self.longitude = geometry['lng']
-                else:
-                    error_msg = response.get('error_message', 'No specific error message provided')
-                    logger.error(f"Geocoding failed for '{self.location}': {response.get('status')} - {error_msg}")
-            
-            except requests.exceptions.RequestException as e:
-                logger.error(f"Network error during geocoding for '{self.location}': {e}")
+            self._geocode()
 
         super().save(*args, **kwargs)
+
+    def _geocode(self):
+        """
+        Look up latitude/longitude for self.location. Does nothing when no
+        backend API key is configured. Failures are logged, never raised,
+        so saving a listing always works.
+        """
+        api_key = settings.GOOGLE_MAPS_BACKEND_KEY
+        if not api_key:
+            logger.info("GOOGLE_MAPS_BACKEND_KEY not set; skipping geocoding for '%s'", self.location)
+            return
+
+        try:
+            response = requests.get(
+                GEOCODE_URL,
+                params={'address': self.location, 'key': api_key},
+                timeout=GEOCODE_TIMEOUT_SECONDS,
+            ).json()
+        except (requests.exceptions.RequestException, ValueError) as e:
+            logger.error("Geocoding request failed for '%s': %s", self.location, e)
+            return
+
+        if response.get('status') == 'OK':
+            geometry = response['results'][0]['geometry']['location']
+            self.latitude = geometry['lat']
+            self.longitude = geometry['lng']
+        else:
+            error_msg = response.get('error_message', 'No specific error message provided')
+            logger.error("Geocoding failed for '%s': %s - %s", self.location, response.get('status'), error_msg)
 
     def __str__(self):
         return self.title
