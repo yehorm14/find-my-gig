@@ -12,11 +12,20 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 import os
+import sys
 
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def env_bool(name, default=False):
+    """Read a boolean environment variable (1/true/yes/on)."""
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ('1', 'true', 'yes', 'on')
 
 
 def env_list(name, default=''):
@@ -60,7 +69,8 @@ if not SECRET_KEY:
     )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'false').strip().lower() in ('1', 'true', 'yes', 'on')
+DEBUG = env_bool('DEBUG')
+TESTING = 'test' in sys.argv  # running `manage.py test`
 
 ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', '127.0.0.1,localhost' if DEBUG else '')
 CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS')
@@ -71,8 +81,20 @@ if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
     CSRF_TRUSTED_ORIGINS.append(f'https://{RENDER_EXTERNAL_HOSTNAME}')
 
-# Behind a TLS-terminating proxy (Render) the original scheme arrives in this header.
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# Set BEHIND_PROXY=true when a TLS-terminating proxy (e.g. Render) forwards
+# requests; the original scheme then arrives in X-Forwarded-Proto.
+BEHIND_PROXY = env_bool('BEHIND_PROXY')
+if BEHIND_PROXY:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# HTTPS hardening. Off in DEBUG so local http://127.0.0.1 keeps working.
+# Override with SECURE_SSL=false to run a production-mode build over plain http.
+if not DEBUG and not TESTING and env_bool('SECURE_SSL', True):
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 3600  # modest: one hour
+    SECURE_CONTENT_TYPE_NOSNIFF = True
 
 
 # Application definition
@@ -170,9 +192,24 @@ STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'  # target of `collectstatic`, served by WhiteNoise
 
+# Hashed, compressed static files in production. Plain storage in DEBUG and
+# under `manage.py test`, where no manifest has been built.
+_use_manifest = not DEBUG and not TESTING
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+        if _use_manifest else 'django.contrib.staticfiles.storage.StaticFilesStorage',
+    },
+}
+
 # Media Files
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+# Serve uploaded media through Django when DEBUG is false. Only suitable for a
+# demo: it is slow and the files live on the host's disk (ephemeral on Render).
+# Use object storage (S3 etc.) for anything real.
+SERVE_MEDIA = env_bool('SERVE_MEDIA')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field

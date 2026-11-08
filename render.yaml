@@ -12,6 +12,10 @@ services:
         generateValue: true
       - key: DEBUG
         value: "false"
+      - key: BEHIND_PROXY
+        value: "true"
+      - key: SERVE_MEDIA
+        value: "true"
       - key: ALLOWED_HOSTS
         sync: false
       - key: CSRF_TRUSTED_ORIGINS
