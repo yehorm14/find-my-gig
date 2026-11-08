@@ -8,8 +8,8 @@ from gigs.models import Musician, Band, Listing, Review, Application, MediaLink,
 class BaseTestCase(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.test_user1 = User.objects.create_superuser(username="thierrycnf", email="2850192F@student.gla.ac.uk", password="lol")
-        cls.test_user2 = User.objects.create_user(username="notchface", email="cruzfru123@outlook.com", password="haha")
+        cls.test_user1 = User.objects.create_superuser(username="thierrycnf", email="musician1@example.com", password="lol")
+        cls.test_user2 = User.objects.create_user(username="notchface", email="musician2@example.com", password="haha")
         
         for i in range(20):
             Review.objects.create(reviewer=cls.test_user1, reviewee=cls.test_user2, rating=5, comment="")
