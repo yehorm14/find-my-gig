@@ -151,8 +151,6 @@ class AccountManagementTests(TestCase):
         }
         response = self.client.post(reverse('gigs:signup'), data=data)
         
-        if response.status_code == 200:
-            print("\nSIGNUP ERRORS (Musician):", response.context['user_form'].errors)
 
         self.assertEqual(response.status_code, 302) 
         self.assertTrue(User.objects.filter(username='new_drummer').exists())
@@ -173,8 +171,6 @@ class AccountManagementTests(TestCase):
         }
         response = self.client.post(reverse('gigs:signup'), data=data)
 
-        if response.status_code == 200:
-            print("\nSIGNUP ERRORS (Band):", response.context['user_form'].errors)
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(Band.objects.filter(name='The Rockers').exists())

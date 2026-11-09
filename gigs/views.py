@@ -1,3 +1,4 @@
+import functools
 import json
 import logging
 
@@ -5,7 +6,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.http import JsonResponse
 from django.conf import settings
-from django.db import transaction
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from django.contrib.auth import login, logout
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
@@ -367,7 +369,7 @@ def update_profile(request):
 
         # Check for username conflicts
         if User.objects.exclude(pk=user.pk).filter(username=username).exists():
-            return JsonResponse({'success': False, 'error': 'username_taken'})
+            return json_error('username_taken')
             
         user.username = username
         user.first_name = firstname or ''
@@ -407,7 +409,7 @@ def update_profile(request):
                 profile.profile_picture = picture
             profile.save()
 
-        return JsonResponse({'success': True})
+        return json_success()
     
     return redirect('gigs:my_profile')
 
@@ -419,8 +421,8 @@ def delete_account(request):
         user = request.user
         logout(request)
         user.delete()
-        return JsonResponse({'success': True})
-    return JsonResponse({'success': False, 'error': 'Invalid request method'})
+        return json_success()
+    return json_error('Invalid request method')
 
 
 # ==============================================================================
@@ -434,27 +436,32 @@ def create_gig_listing(request):
     """
     if request.method == 'POST':
         if not hasattr(request.user, 'band'):
-            return JsonResponse({'success': False, 'error': 'not_a_band'})
+            return json_error('not_a_band')
 
-        data = json.loads(request.body)
-        title = data.get('title', '').strip()
-        req_instruments = data.get('req_instruments', '').strip()
+        data = parse_json_body(request)
+        if data is None:
+            return json_error('invalid_json')
+        title = str(data.get('title', '')).strip()
+        req_instruments = str(data.get('req_instruments', '')).strip()
         deadline = data.get('date', '')
-        description = data.get('description', '').strip()
-        location = data.get('location', '').strip()
+        description = str(data.get('description', '')).strip()
+        location = str(data.get('location', '')).strip()
 
         if not all([title, req_instruments, deadline, description, location]):
-            return JsonResponse({'success': False, 'error': 'missing_fields'})
+            return json_error('missing_fields')
 
-        listing = Listing.objects.create(
-            band=request.user.band,
-            title=title,
-            req_instruments=req_instruments,
-            deadline=deadline,
-            description=description,
-            location=location,
-            is_urgent=False
-        )
+        try:
+            listing = Listing.objects.create(
+                band=request.user.band,
+                title=title,
+                req_instruments=req_instruments,
+                deadline=deadline,
+                description=description,
+                location=location,
+                is_urgent=False
+            )
+        except (ValidationError, ValueError):
+            return json_error('invalid_data')
 
         return JsonResponse({
             'success': True,
@@ -468,72 +475,94 @@ def create_gig_listing(request):
             }
         })
         
-    return JsonResponse({'success': False, 'error': 'Invalid request method'})
+    return json_error('Invalid request method')
 
     
 @login_required
 def delete_listing(request, listing_id):
     """Allows a Band to delete their own listing."""
     if request.method == 'POST':
+        if not hasattr(request.user, 'band'):
+            return json_error('not_a_band')
         try:
             listing = Listing.objects.get(id=listing_id, band=request.user.band)
             listing.delete()
-            return JsonResponse({'success': True})
+            return json_success()
         except Listing.DoesNotExist:
-            return JsonResponse({'success': False, 'error': 'not_found'})
-    return JsonResponse({'success': False, 'error': 'invalid_request'})
+            return json_error('not_found')
+    return json_error('invalid_request')
 
 
-def apply_gig(request, gig_id):
+def json_error(error):
+    """Standard failure payload for the AJAX endpoints."""
+    return JsonResponse({'success': False, 'error': error})
+
+
+def json_success(**extra):
+    """Standard success payload for the AJAX endpoints."""
+    return JsonResponse({'success': True, **extra})
+
+
+def parse_json_body(request):
+    """Return the decoded JSON object in the request body, or None if it is malformed."""
+    try:
+        data = json.loads(request.body)
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def listing_action(view_func):
+    """
+    Shared boilerplate for the AJAX endpoints that act on one Listing.
+    Requires POST and a logged-in user (answering with JSON errors rather
+    than redirects), then calls view_func(request, listing).
+    """
+    @functools.wraps(view_func)
+    def wrapper(request, gig_id):
+        if request.method != 'POST':
+            return json_error('Invalid request')
+        if not request.user.is_authenticated:
+            return json_error('not_logged_in')
+        listing = get_object_or_404(Listing, id=gig_id)
+        return view_func(request, listing)
+    return wrapper
+
+
+@listing_action
+def apply_gig(request, listing):
     """Creates an Application linking a Musician to a Gig."""
-    if request.method == 'POST':
-        if not request.user.is_authenticated:
-            return JsonResponse({'success': False, 'error': 'not_logged_in'})
-        
-        listing = get_object_or_404(Listing, id=gig_id)
-        if Application.objects.filter(applicant=request.user, listing=listing).exists():
-            return JsonResponse({'success': False, 'error': 'already_applied'})
-        
-        Application.objects.create(applicant=request.user, listing=listing)
-        return JsonResponse({'success': True})
-    return JsonResponse({'success': False, 'error': 'Invalid request'})
+    if Application.objects.filter(applicant=request.user, listing=listing).exists():
+        return json_error('already_applied')
+
+    try:
+        with transaction.atomic():
+            Application.objects.create(applicant=request.user, listing=listing)
+    except IntegrityError:
+        # Lost a race with a concurrent identical request.
+        return json_error('already_applied')
+    return json_success()
 
 
-def withdraw_gig(request, gig_id):
+@listing_action
+def withdraw_gig(request, listing):
     """Deletes an Application linking a Musician to a Gig."""
-    if request.method == 'POST':
-        if not request.user.is_authenticated:
-            return JsonResponse({'success': False, 'error': 'not_logged_in'})
-            
-        listing = get_object_or_404(Listing, id=gig_id)
-        Application.objects.filter(applicant=request.user, listing=listing).delete()
-        return JsonResponse({'success': True})
-    return JsonResponse({'success': False, 'error': 'Invalid request'})
+    Application.objects.filter(applicant=request.user, listing=listing).delete()
+    return json_success()
 
 
-def save_gig(request, gig_id):
+@listing_action
+def save_gig(request, listing):
     """Adds the Gig to the user's Bookmarked Gigs list."""
-    if request.method == 'POST':
-        if not request.user.is_authenticated:
-            return JsonResponse({'success': False, 'error': 'not_logged_in'})
-            
-        listing = get_object_or_404(Listing, id=gig_id)
-        listing.bookmarks.add(request.user) 
-        return JsonResponse({'success': True})
-    return JsonResponse({'success': False, 'error': 'Invalid request'})
+    listing.bookmarks.add(request.user)
+    return json_success()
 
 
-def unsave_gig(request, gig_id):
+@listing_action
+def unsave_gig(request, listing):
     """Removes the Gig from the user's Bookmarked Gigs list."""
-    if request.method == 'POST':
-        if not request.user.is_authenticated:
-            return JsonResponse({'success': False, 'error': 'not_logged_in'})
-            
-        listing = get_object_or_404(Listing, id=gig_id)
-        listing.bookmarks.remove(request.user)
-        return JsonResponse({'success': True})
-    return JsonResponse({'success': False, 'error': 'Invalid request'})
-
+    listing.bookmarks.remove(request.user)
+    return json_success()
 
 
 # ==============================================================================
@@ -604,23 +633,25 @@ def send_interest(request, musician_id):
     """Allows a Band to send a simple interest message to a Musician via AJAX."""
     if request.method == 'POST':
         if not hasattr(request.user, 'band'):
-            return JsonResponse({'success': False, 'error': 'Only bands can send interest.'})
+            return json_error('Only bands can send interest.')
 
         band = request.user.band
         musician = get_object_or_404(Musician, id=musician_id)
-        data = json.loads(request.body)
-        message = data.get('message', '').strip()
+        data = parse_json_body(request)
+        if data is None:
+            return json_error('invalid_json')
+        message = str(data.get('message', '')).strip()
 
         if not message:
-            return JsonResponse({'success': False, 'error': 'Message cannot be empty.'})
+            return json_error('Message cannot be empty.')
 
         if BandInterest.objects.filter(band=band, musician=musician).exists():
-            return JsonResponse({'success': False, 'error': 'You have already reached out to this musician.'})
+            return json_error('You have already reached out to this musician.')
 
         BandInterest.objects.create(band=band, musician=musician, message=message)
-        return JsonResponse({'success': True})
+        return json_success()
         
-    return JsonResponse({'success': False, 'error': 'Invalid request method'})
+    return json_error('Invalid request method')
     
 
 @login_required
@@ -641,8 +672,8 @@ def delete_interest(request, interest_id):
             musician = request.user.musician
             interest = BandInterest.objects.get(id=interest_id, musician=musician)
             interest.delete()
-            return JsonResponse({'success': True})
+            return json_success()
         except (Musician.DoesNotExist, BandInterest.DoesNotExist):
-            return JsonResponse({'success': False, 'error': 'Not found.'})
+            return json_error('Not found.')
             
-    return JsonResponse({'success': False, 'error': 'Invalid request method'})
+    return json_error('Invalid request method')

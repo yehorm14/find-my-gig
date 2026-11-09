@@ -1,126 +1,70 @@
-# Find My Gig - Team 1E
+# Find My Gig
 
-Welcome to the Find My Gig repository. The objective of our application is to give musicians and bands a place to connect, collaborate, and fill open gig opportunities near them.
+A Django web app where bands post gigs and musicians find, apply for and review them.
 
-## Tech Stack
-* **Backend:** Django 4.2 LTS (Python 3.11)
-* **Frontend:** HTML, CSS, JavaScript (AJAX)
-* **Database:** SQLite (Default Django)
-* **APIs:** Google Maps API
+![Gig listings page](docs/images/listings.png)
 
----
+## Why it is useful
 
-## Local Setup Instructions (VS Code)
+- Bands post open spots with instrument, location and deadline in one place.
+- Musicians filter open gigs by instrument and date.
+- Reviews on both sides build a track record for each profile.
 
-To start working on the project, follow these steps exactly. Make sure you have Python 3.11 and VS Code installed on your computer first.
+## Features
 
-### 1. Clone the Repository
-Open your VS Code terminal (Command Prompt) and run:
+- Musician and band accounts with sign-up, login and email password reset.
+- Gig listings with instrument and date filters and a Google Map on each gig.
+- Musicians apply, withdraw and bookmark gigs.
+- Bands create and delete listings from a dashboard.
+- Bands browse musicians and send reach-out messages to an inbox.
+- Ratings (1 to 5) and comments between musicians and bands, tied to a gig.
+- Editable profiles with picture, instruments and media links.
+
+## How it works
+
+- One Django app, `gigs`, rendering server-side templates with SQLite storage.
+- JSON endpoints handle apply, bookmark, create listing and reach-out. Vanilla JS calls them with `fetch`.
+- `Listing.save()` geocodes the location with the Google Geocoding API. Without keys, geocoding is skipped and maps show a placeholder.
+
+## Tech stack
+
+- Backend: Python, Django 4.2, SQLite, gunicorn, WhiteNoise
+- Frontend: Django templates, Bootstrap 5, vanilla JavaScript
+- APIs: Google Maps JavaScript and Geocoding (optional)
+- Tooling: GitHub Actions (Python 3.12), Render
+
+## Run locally
+
 ```bash
-git clone [https://github.com/YOUR-USERNAME/Find_My_Gig.git](https://github.com/YOUR-USERNAME/Find_My_Gig.git)
-cd Find_My_Gig
-```
-
-### 2. Set Up Your Virtual Environment
-We use a virtual environment to make sure everyone is using the exact same versions of our packages and to avoid conflicts.
-* **Mac/Linux:** `python3 -m venv gig_env`
-* **Windows:** `python -m venv gig_env`
-
-### 3. Activate the Virtual Environment
-You must do this every time you open the project in VS Code.
-* **Mac/Linux:** `source gig_env/bin/activate`
-* **Windows:** `gig_env\Scripts\activate`
-*(You will know it worked if you see `(gig_env)` at the start of your terminal line).*
-
-### 4. Install the Dependencies
-Now, install our specific version of Django and our other packages:
-```bash
+git clone https://github.com/yehorm14/find-my-gig && cd find-my-gig
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-### 5. Run the Server
-To test that everything is working, start up the local development server:
-```bash
+cp .env.example .env        # then set DJANGO_SECRET_KEY, see docs/DEPLOY.md
+python manage.py migrate
+python population_script.py # optional demo data
 python manage.py runserver
 ```
-*(Open your browser and go to http://127.0.0.1:8000/ to see the site).*
 
----
+Open http://127.0.0.1:8000/. Demo logins: musician `musician_1`, band `band_user_1`, password `Password123!`. Configuration and deployment: [docs/DEPLOY.md](docs/DEPLOY.md).
 
-## 🛠️ Our Team's Git Workflow
+## Tests
 
-Because our `main` branch is mechanically protected, **nobody is allowed to push directly to main.** All work must be done on personal feature branches and approved via Pull Requests (PRs). 
+71 tests: `python manage.py test` (needs `DJANGO_SECRET_KEY` set).
 
-Please follow these exact steps to ensure we don't overwrite each other's code or create massive merge conflicts!
+## Team and my role
 
-### 1. Starting a New Task
-Never create a new branch from an outdated blueprint. Always update your local `main` first.
-```bash
-# 1. Switch to your local main branch
-git switch main
+Built by Team 1E for the University of Glasgow Web App Development course (January to March 2026). This is Yehor Mykhailov's maintained copy of the team repository.
 
-# 2. Download the absolute newest code from GitHub
-git pull origin main
+Team: Yehor Mykhailov (`yehorm14`), Ross, Cruz, Akif Baig (`AkifBaig01`), Mackenzie Trafford (`mushypea`).
 
-# 3. Create a new task branch (-c stands for create) and switch to it
-git switch -c your-descriptive-branch-name
-```
+What Yehor built:
 
-### 2. Saving and Pushing Your Work
-Commit often! Once your feature is working locally, push it up to GitHub.
-```bash
-# 1. Stage all your changed files
-git add .
+- About 70% of the surviving application code by `git blame`, including most of `views.py`, the Google Maps geocoding, forms and URL routing.
+- The demo data script and most of the test suite.
+- The template and CSS refactor, and later the environment-based configuration, CI and Render setup.
 
-# 2. Save them with a clear, descriptive message
-git commit -m "feat: Describe what you added or fixed here"
+Ross wrote the first templates and JavaScript, Cruz the first models and login flows, Akif Baig URL and form work, and Mackenzie Trafford CSS.
 
-# 3. Push your branch to GitHub (use -u ONLY the very first time you push a new branch)
-git push -u origin your-descriptive-branch-name
-```
+## Credits
 
-### 3. ⚠️ IMPORTANT: Updating an Active Branch
-If a teammate just merged their code into `main`, your active feature branch is now out of date! **You MUST pull their new code into your workspace before you open a Pull Request.**
-
-```bash
-# 1. Save whatever you are currently working on
-git add .
-git commit -m "chore: save progress before pulling updated main"
-
-# 2. Switch to your local main branch
-git switch main
-
-# 3. Download the new code from GitHub
-git pull origin main
-
-# 4. Switch back to your active feature branch
-git switch your-descriptive-branch-name
-
-# 5. Inject the newly updated main code into your workspace
-git merge main
-```
-*(Note: If step 5 causes a Merge Conflict, open the conflicting files in your VS Code editor, choose which code to keep, save the file, and run `git commit -am "Resolved merge conflicts"`).*
-
-### 4. 🚑 Emergency Tip: Undoing Mistakes
-If you accidentally save or delete code in a file and want to throw away your local changes to go back to the last committed version, do not use checkout! Use restore:
-```bash
-git restore name_of_the_broken_file.py
-```
-
-### 5. Opening a Pull Request
-Once your code is pushed and your branch is fully up-to-date with `main`:
-1. Go to our repository on GitHub.
-2. Click the green **Compare & pull request** button next to your branch.
-3. Leave a brief description of what you built.
-4. Ask a teammate to review and approve your code. Once approved, click **Merge**!
-
----
-
-### External Sources & Acknowledgments
-
-* **Mapping:** Google Maps API (used for both frontend dynamic map rendering and backend geocoding for gig locations).
-* **Styling:** Bootstrap 5 (Responsive CSS framework used for the core UI, grid layouts, and dark-mode styling).
-* **Icons/Images:** * Bootstrap Icons (used for the interactive star-rating UI in the review forms).
-  * Picsum Photos API (`https://picsum.photos/`) (used in `population_script.py` to automatically fetch and generate dummy profile pictures for testing).
-* **Other Python Libraries:** * `requests` (Used for backend API communication).
-  * `Pillow` (Required by Django for processing and saving uploaded `ImageField` media).
+Google Maps APIs, Bootstrap 5 and Bootstrap Icons, demo pictures from picsum.photos.

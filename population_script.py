@@ -1,3 +1,18 @@
+"""
+Seed the database with demo data: 10 bands, 30 musicians, listings,
+applications and reviews. Profile pictures are downloaded from picsum.photos
+(skipped if offline).
+
+Run after `python manage.py migrate`:
+
+    python population_script.py            # seeds only if no non-admin users exist
+    python population_script.py --reset    # deletes all non-admin users first
+
+Only two seeded accounts can log in: band_user_1 and musician_1, both with the
+password 'Password123!'. All other seeded users get unusable passwords.
+Demo use only.
+"""
+import argparse
 import os
 import shutil
 import random
@@ -19,6 +34,9 @@ from gigs.models import Musician, Band, Listing, Review, Application, MediaLink,
 # ==========================================
 # 1. HELPER DATA & FUNCTIONS
 # ==========================================
+DEMO_USERNAMES = {"band_user_1", "musician_1"}
+DEMO_PASSWORD = "Password123!"
+
 INSTRUMENTS = ['Guitar', 'Bass', 'Drums', 'Vocals', 'Keys/Synth', 'Other']
 
 UK_VENUES = [
@@ -113,13 +131,13 @@ def download_image(seed_text, size=300):
 
 def clear_data():
     """Clears existing users to prevent duplicates, but safely keeps Superusers (Admins)."""
-    print("🗑️ Clearing old data (preserving Admin accounts)...")
+    print("Clearing old data (preserving Admin accounts)...")
     User.objects.filter(is_superuser=False).delete()
-    print("✅ Database cleared.\n")
+    print("Database cleared.\n")
 
 def clear_media():
     """Wipes the files inside profile_images without deleting the locked folder itself."""
-    print("🧹 Clearing old profile images...")
+    print("Clearing old profile images...")
     media_dir = os.path.join(settings.MEDIA_ROOT, 'profile_images')
     if os.path.exists(media_dir):
         for filename in os.listdir(media_dir):
@@ -133,13 +151,17 @@ def clear_media():
                 pass
     else:
         os.makedirs(media_dir, exist_ok=True)
-    print("✅ Media cleared.\n")
+    print("Media cleared.\n")
 
 
 # ==========================================
 # 2. POPULATION SCRIPT
 # ==========================================
-def populate():
+def populate(reset=False):
+    if User.objects.filter(is_superuser=False).exists() and not reset:
+        print("Database already has users; skipping. Use --reset to wipe them and reseed.")
+        return
+
     clear_data()
     clear_media()
     
@@ -148,13 +170,17 @@ def populate():
     listings_list = []
     
     # --- CREATE 10 BANDS ---
-    print("🎸 Creating 10 Bands (Downloading unique images...)")
+    print("Creating 10 Bands (Downloading unique images...)")
     for i in range(10):
         username = f"band_user_{i+1}"
         band_name = BAND_NAMES[i]
         home_base = random.choice(UK_VENUES)
         
-        user = User.objects.create_user(username=username, email=f"{username}@test.com", password="Password123!")
+        user = User.objects.create_user(username=username, email=f"{username}@test.com")
+        if username in DEMO_USERNAMES:
+            user.set_password(DEMO_PASSWORD)
+        else:
+            user.set_unusable_password()
         user.first_name = "Band"
         user.last_name = f"Manager {i+1}"
         user.save()
@@ -177,11 +203,15 @@ def populate():
 
 
     # --- CREATE 30 MUSICIANS ---
-    print("🥁 Creating 30 Musicians (Downloading unique images...)")
+    print("Creating 30 Musicians (Downloading unique images...)")
     for i in range(30):
         username = f"musician_{i+1}"
         
-        user = User.objects.create_user(username=username, email=f"{username}@test.com", password="Password123!")
+        user = User.objects.create_user(username=username, email=f"{username}@test.com")
+        if username in DEMO_USERNAMES:
+            user.set_password(DEMO_PASSWORD)
+        else:
+            user.set_unusable_password()
         user.first_name = f"Talent"
         user.last_name = f"Num{i+1}"
         user.save()
@@ -207,7 +237,7 @@ def populate():
 
 
     # --- CREATE 30 GIG LISTINGS ---
-    print("📅 Creating 30 Gig Listings...")
+    print("Creating 30 Gig Listings...")
     for i in range(30):
         owning_band = random.choice(bands_list)
         future_date = timezone.now() + timedelta(days=random.randint(1, 60))
@@ -231,7 +261,7 @@ def populate():
 
 
     # --- CREATE APPLICATIONS & REVIEWS ---
-    print("📝 Generating Applications and Reviews...")
+    print("Generating Applications and Reviews...")
     for listing in listings_list:
         # Pick 1 to 3 random musicians to apply for each gig
         applicants = random.sample(musicians_list, random.randint(1, 3))
@@ -260,8 +290,10 @@ def populate():
                 )
     print("  - Applications and Reviews generated successfully.")
 
-    print("\n🎉 POPULATION COMPLETE! 🎉")
-    print("Log in with any username (e.g., 'musician_1' or 'band_user_1') and password: Password123!")
+    print("\nPOPULATION COMPLETE! ")
+    print("Demo logins: band_user_1 or musician_1, password: Password123!")
 
 if __name__ == '__main__':
-    populate()
+    parser = argparse.ArgumentParser(description='Seed the database with demo data.')
+    parser.add_argument('--reset', action='store_true', help='delete existing non-admin users and reseed')
+    populate(reset=parser.parse_args().reset)
