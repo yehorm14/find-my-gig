@@ -356,6 +356,11 @@ function handleProfileUpdateResponse(data) {
         linksToDelete = [];
     } else if (data.error === 'username_taken') {
         showStatusMessage('status-message', 'That username is already taken, please choose another', 'error');
+    } else if (data.errors) {
+        const details = Object.entries(data.errors)
+            .map(([field, messages]) => `${field}: ${messages.join(' ')}`)
+            .join('; ');
+        showStatusMessage('status-message', `Please fix: ${details}`, 'error');
     } else {
         showStatusMessage('status-message', 'Something went wrong, try again', 'error');
     }
