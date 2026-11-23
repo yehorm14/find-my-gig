@@ -56,12 +56,14 @@ class AjaxActionTests(ViewBaseTestCase):
         """EDGE CASE: Spamming the apply button should return an error"""
         Application.objects.create(applicant=self.musician_user, listing=self.listing)
         response = self.client.post(reverse('gigs:apply_gig', args=[self.listing.id]))
+        self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()['success'], False)
         self.assertEqual(response.json()['error'], 'already_applied')
 
     def test_invalid_http_method_blocked(self):
         """EDGE CASE: Sending a GET request to an AJAX POST endpoint"""
         response = self.client.get(reverse('gigs:apply_gig', args=[self.listing.id]))
+        self.assertEqual(response.status_code, 405)
         self.assertEqual(response.json()['success'], False)
         self.assertEqual(response.json()['error'], 'Invalid request')
 
@@ -140,6 +142,7 @@ class SecurityViewTests(TestCase):
     def test_ajax_apply_requires_login(self):
         """EDGE CASE: Anonymous user trying to hit the apply endpoint"""
         response = self.client.post(reverse('gigs:apply_gig', args=[self.listing.id]))
+        self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()['success'], False)
         self.assertEqual(response.json()['error'], 'not_logged_in')
 
@@ -237,6 +240,7 @@ class ApplicationDecisionTests(ViewBaseTestCase):
         self.client.login(username='otherband', password='pass123')
         for action in ('accept', 'decline'):
             response = self.client.post(self.url(action))
+            self.assertEqual(response.status_code, 404)
             self.assertEqual(response.json(), {'success': False, 'error': 'not_found'})
             self.assertEqual(self.status(), 'Pending')
 
@@ -244,22 +248,29 @@ class ApplicationDecisionTests(ViewBaseTestCase):
         self.client.login(username='musicianuser', password='pass123')
         for action in ('accept', 'decline'):
             response = self.client.post(self.url(action))
+            self.assertEqual(response.status_code, 403)
             self.assertEqual(response.json(), {'success': False, 'error': 'not_a_band'})
             self.assertEqual(self.status(), 'Pending')
 
     def test_anonymous_cannot_change_status(self):
         for action in ('accept', 'decline'):
-            self.assertFalse(self.client.post(self.url(action)).json()['success'])
+            response = self.client.post(self.url(action))
+            self.assertEqual(response.status_code, 403)
+            self.assertEqual(response.json(), {'success': False, 'error': 'not_logged_in'})
             self.assertEqual(self.status(), 'Pending')
 
     def test_get_is_rejected_and_changes_nothing(self):
         self.client.login(username='banduser', password='pass123')
-        self.assertEqual(self.client.get(self.url('accept')).json()['error'], 'invalid_request')
+        response = self.client.get(self.url('accept'))
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(response.json()['error'], 'invalid_request')
         self.assertEqual(self.status(), 'Pending')
 
     def test_unknown_application_is_not_found(self):
         self.client.login(username='banduser', password='pass123')
-        self.assertEqual(self.client.post(self.url('accept', 999999)).json()['error'], 'not_found')
+        response = self.client.post(self.url('accept', 999999))
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()['error'], 'not_found')
 
     def test_csrf_is_enforced(self):
         from django.test import Client
@@ -315,12 +326,14 @@ class BandApplyRestrictionTests(ViewBaseTestCase):
     def test_band_cannot_apply_to_other_bands_gig(self):
         self.client.login(username='otherband', password='pass123')
         response = self.client.post(reverse('gigs:apply_gig', args=[self.listing.id]))
+        self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json(), {'success': False, 'error': 'not_a_musician'})
         self.assertFalse(Application.objects.filter(listing=self.listing).exists())
 
     def test_band_cannot_apply_to_own_gig(self):
         self.client.login(username='banduser', password='pass123')
         response = self.client.post(reverse('gigs:apply_gig', args=[self.listing.id]))
+        self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json(), {'success': False, 'error': 'not_a_musician'})
         self.assertFalse(Application.objects.filter(listing=self.listing).exists())
 
@@ -347,5 +360,6 @@ class BandApplyRestrictionTests(ViewBaseTestCase):
         Musician.objects.create(user=self.band_user)
         self.client.login(username='banduser', password='pass123')
         response = self.client.post(reverse('gigs:apply_gig', args=[self.listing.id]))
+        self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json(), {'success': False, 'error': 'own_gig'})
         self.assertFalse(Application.objects.filter(listing=self.listing).exists())

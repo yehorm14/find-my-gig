@@ -16,6 +16,19 @@ function getCookie(name) {
 }
 
 /**
+ * Reads the JSON body of a fetch response whatever its HTTP status: the AJAX
+ * endpoints answer failures with 4xx statuses and a JSON body
+ * ({success: false, error: ...}). A body that is not JSON (for example an
+ * HTML error page) becomes a generic failure payload so callers can keep
+ * reading data.success / data.error.
+ */
+function readJson(response) {
+    return response.json().catch(function () {
+        return { success: false, error: 'Something went wrong (' + response.status + ')' };
+    });
+}
+
+/**
  * Displays a temporary status message on the screen.
  */
 function showStatusMessage(elementId, message, type) {
