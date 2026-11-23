@@ -12,28 +12,30 @@
         <div class="col-md-6">
             <h2 class="mb-0" style="font-weight: 800; font-size: 2.2rem;">Discover <span class="gig-accent-text">Gigs</span></h2>
         </div>
-        <div class="col-md-6 d-flex justify-content-md-end mt-3 mt-md-0">
+        <div class="col-md-6 d-flex flex-wrap gap-2 justify-content-md-end mt-3 mt-md-0">
+            <label for="filter-instrument" class="visually-hidden">Filter by instrument</label>
             <select class="form-select w-auto me-2" id="filter-instrument" name="filter" style="color: #fff !important;">
                 <option value="">Filter by Instrument...</option>
                 <option value="Guitar" {% if selected_instrument == 'Guitar' %}selected{% endif %}>Guitar</option>
                 <option value="Drums"  {% if selected_instrument == 'Drums' %}selected{% endif %}>Drums</option>
                 <option value="Vocals" {% if selected_instrument == 'Vocals' %}selected{% endif %}>Vocals</option>
                 <option value="Bass"   {% if selected_instrument == 'Bass' %}selected{% endif %}>Bass</option>
+                <option value="Keys/Synth" {% if selected_instrument == 'Keys/Synth' %}selected{% endif %}>Keys/Synth</option>
                 <option value="Other"  {% if selected_instrument == 'Other' %}selected{% endif %}>Other</option>
             </select>
-            <button type="button" id="filter-btn" class="btn apply-btn rounded-pill px-4 me-2">Filter</button>
+            <button type="button" id="filter-btn" class="btn apply-btn rounded-pill px-4">Filter</button>
             <a href="{% url 'gigs:gig_listings' %}" class="btn btn-outline-light rounded-pill px-4">Clear</a>
         </div>
     </div>
 
-    <hr class="mb-5" style="border-color: var(--border-dim);">
+    <hr class="mb-4" style="border-color: var(--border-dim);">
 
     <div id="gigs-list" class="row">
         {% for gig in gigs %}
         <div class="col-md-6 col-lg-4 d-flex align-items-stretch mb-4">
-            <div class="listing-card w-100 d-flex flex-column p-4">
+            <div class="listing-card w-100 d-flex flex-column p-3">
                 
-                <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
                     <span class="badge badge-instrument rounded-pill px-3 py-2">
                         🎸 {{ gig.req_instruments }}
                     </span>
@@ -44,9 +46,9 @@
 
                 <h3 class="gig-title mb-1">{{ gig.title }}</h3>
                 <p class="text-muted-custom mb-2"><strong>Band:</strong> {{ gig.band.name }}</p>
-                <p class="mb-3">📍 <span class="gig-accent-text">{{ gig.location }}</span></p>
+                <p class="mb-2">📍 <span class="gig-accent-text">{{ gig.location }}</span></p>
 
-                <div class="mt-auto pt-3 border-top-accent">
+                <div class="mt-auto pt-2 border-top-accent">
                     
                     <a href="{% url 'gigs:gig_detail' gig.id %}" class="btn btn-outline-light w-100 rounded-pill mb-2">
                         View Details
@@ -72,7 +74,7 @@
                     {% endif %}
 
                     <div class="text-center">
-                        <small class="text-muted-custom">⏳ Deadline: {{ gig.deadline|date:"M d, Y" }}</small>
+                        <small class="text-muted-custom">⏳ Apply by {{ gig.deadline|date:"M d, Y" }}</small>
                     </div>
                 </div>
 

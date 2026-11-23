@@ -344,3 +344,15 @@ body {
 .application-status.status-pending { background-color: #6c757d; }
 .application-status.status-accepted { background-color: #198754; }
 .application-status.status-declined { background-color: var(--neon-red); }
+
+/* Compact listing cards and visible keyboard focus (issue #23) */
+.listing-card .gig-title { font-size: 1.15rem; }
+.listing-card .btn:focus-visible,
+.form-select:focus-visible,
+.subtle-link:focus-visible {
+    outline: 2px solid var(--neon-cyan);
+    outline-offset: 2px;
+}
+@media (max-width: 400px) {
+    #filter-instrument { width: 100% !important; }
+}
