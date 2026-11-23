@@ -75,6 +75,7 @@ class ReviewViewTests(ViewBaseTestCase):
         self.client.login(username='musicianuser', password='pass123')
 
     def test_submit_valid_review(self):
+        Application.objects.create(applicant=self.musician_user, listing=self.listing)
         response = self.client.post(reverse('gigs:submit_review', args=[self.listing.id]), data={
             'rating': '5',
             'comment': 'Awesome band!'

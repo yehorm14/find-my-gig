@@ -5,6 +5,13 @@
 
 {% block body_block %}
 <div id="status-message" class="container mt-3"></div>
+{% if messages %}
+<div class="container mt-3">
+  {% for message in messages %}
+    <div class="{% if message.tags == 'error' %}status-error{% else %}status-success{% endif %}" style="display: block;">{{ message }}</div>
+  {% endfor %}
+</div>
+{% endif %}
 
 <div class="container mt-4 px-4 px-md-5 mb-5">
     
@@ -63,9 +70,11 @@
 
                 {% if user.is_authenticated %}
                     <div class="mt-auto pt-4 border-top-accent w-100 d-flex flex-column gap-3">
+                        {% if can_review %}
                         <a href="{% url 'gigs:submit_musician_review' musician.id %}" class="btn btn-outline-light rounded-pill w-100 py-2">
                             Leave a Review
                         </a>
+                        {% endif %}
                         
                         {% if profile_type == 'band' %}
                             <button type="button" class="btn apply-btn rounded-pill w-100 py-2" data-bs-toggle="modal" data-bs-target="#interestModal">
