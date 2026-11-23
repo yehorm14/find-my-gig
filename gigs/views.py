@@ -10,6 +10,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
+from django.utils import timezone
 from django.contrib.auth import login, logout
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
@@ -54,8 +55,13 @@ def home(request):
 def gig_listings(request):
     """
     Handles the main Gig list page with dropdown filtering and sorting.
+    Gigs whose deadline has passed are hidden unless ?show_past=1 is given.
     """
     gigs_queryset = Listing.objects.all()
+
+    show_past = request.GET.get('show_past') == '1'
+    if not show_past:
+        gigs_queryset = gigs_queryset.filter(deadline__gte=timezone.localdate())
 
     # Extract filter and sort parameters from URL
     instrument_filter = request.GET.get('instrument', '')
@@ -97,6 +103,7 @@ def gig_listings(request):
         'selected_instrument': instrument_filter,
         'selected_date': date_query,
         'current_sort': sort_by,
+        'show_past': show_past,
         'bookmarked_gig_ids': bookmarked_gig_ids,
     }
 
@@ -489,6 +496,8 @@ def create_gig_listing(request):
             return json_error('missing_fields')
 
         try:
+            if datetime.date.fromisoformat(str(deadline)) < timezone.localdate():
+                return json_error('invalid_data')
             listing = Listing.objects.create(
                 band=request.user.band,
                 title=title,
@@ -576,6 +585,8 @@ def apply_gig(request, listing):
         return json_error('own_gig')
     if Application.objects.filter(applicant=request.user, listing=listing).exists():
         return json_error('already_applied')
+    if listing.deadline < timezone.localdate():
+        return json_error('deadline_passed')
 
     try:
         with transaction.atomic():
