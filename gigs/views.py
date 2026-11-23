@@ -92,9 +92,9 @@ def gig_listings(request):
 
     # Apply sorting
     if sort_by == 'name':
-        gigs_queryset = gigs_queryset.order_by('title')
+        gigs_queryset = gigs_queryset.order_by('title', 'id')
     else:
-        gigs_queryset = gigs_queryset.order_by('deadline') 
+        gigs_queryset = gigs_queryset.order_by('deadline', 'id')
     
     gigs_page, page_query = paginate_list(request, gigs_queryset)
 
