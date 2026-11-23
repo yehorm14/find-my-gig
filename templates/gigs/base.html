@@ -84,6 +84,17 @@
     </nav>
     {% endblock %}
 
+    {% if demo_mode %}
+    <div class="alert alert-warning text-center rounded-0 mb-0 py-2" role="status" id="demo-banner">
+      <strong>Portfolio demo.</strong> All gigs, musicians, bands and reviews are generated sample data.
+      The site is read-only: nothing you do is saved, and other visitors never see your actions.
+      {% if not user.is_authenticated %}
+      <form method="POST" action="{% url 'gigs:demo_start' 'musician' %}" class="d-inline">{% csrf_token %}<button class="btn btn-sm btn-dark ms-2">Try as musician</button></form>
+      <form method="POST" action="{% url 'gigs:demo_start' 'band' %}" class="d-inline">{% csrf_token %}<button class="btn btn-sm btn-dark ms-1">Try as band</button></form>
+      {% endif %}
+    </div>
+    {% endif %}
+
     {% block body_block %} 
     {% endblock %}
 

@@ -8,6 +8,10 @@ A Django web app where bands post gigs and musicians find, apply for and review 
 
 ![Gig listings page](docs/images/listings.png)
 
+## Portfolio demo
+
+No live demo URL is published yet. The repo includes a read-only, no-signup demo mode (`DEMO_MODE=true`, sample data, one-click musician and band views, edits not saved). See [docs/DEPLOY.md](docs/DEPLOY.md#read-only-portfolio-demo); the link will go here once it is deployed and verified.
+
 ## Screenshots
 
 | Home | Band dashboard |
@@ -61,7 +65,7 @@ The app is set up for deployment on Render (see `render.yaml`); [docs/DEPLOY.md]
 
 ## Tests
 
-71 tests: `python manage.py test` (needs `DJANGO_SECRET_KEY` set).
+Tests: `python manage.py test` (needs `DJANGO_SECRET_KEY` set).
 
 ## Team and my role
 

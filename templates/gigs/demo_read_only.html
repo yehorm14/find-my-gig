@@ -1,0 +1,11 @@
+{% extends 'gigs/base.html' %}
+
+{% block title_block %}Read-only demo{% endblock %}
+
+{% block body_block %}
+<div class="container mt-5 pt-5 mb-5 text-center">
+  <h1 style="font-weight: 800; color: #fff;">Read-only <span class="gig-accent-text">demo</span></h1>
+  <p class="lead text-muted-custom mt-3">{{ message }}</p>
+  <a href="javascript:history.back()" class="btn btn-outline-light rounded-pill px-4 mt-3">Go back</a>
+</div>
+{% endblock %}

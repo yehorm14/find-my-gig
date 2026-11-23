@@ -4,7 +4,9 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate && python population_script.py
-    startCommand: gunicorn find_my_gig.wsgi
+    # Re-seed on every start: the free plan's disk is ephemeral, so a cold start
+    # may begin with an empty database. The script skips seeding if users exist.
+    startCommand: python manage.py migrate --noinput && python population_script.py && gunicorn find_my_gig.wsgi
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.8
@@ -13,6 +15,8 @@ services:
       - key: DEBUG
         value: "false"
       - key: BEHIND_PROXY
+        value: "true"
+      - key: DEMO_MODE
         value: "true"
       - key: SERVE_MEDIA
         value: "true"

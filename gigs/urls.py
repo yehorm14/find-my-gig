@@ -1,7 +1,7 @@
 from django.urls import path, reverse_lazy
 from django.contrib.auth import views as auth_views
 
-from gigs import views
+from gigs import views, demo
 
 # Application namespace to prevent URL naming conflicts
 app_name = 'gigs'
@@ -64,6 +64,7 @@ urlpatterns = [
     # --- 5. AUTHENTICATION & SIGNUPS ---
     # ==========================================
     path('signup/', views.signup_choice, name='signup'),
+    path('demo/start/<str:role>/', demo.demo_start, name='demo_start'),
     
     path(
         'login/', 
