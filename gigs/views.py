@@ -9,6 +9,7 @@ from django.http import JsonResponse
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.core.paginator import Paginator
 from django.db.models import Prefetch
 from django.contrib.auth import login, logout
 from django.contrib.auth.models import User
@@ -51,6 +52,21 @@ def home(request):
     return render(request, 'gigs/home.html', context)
 
 
+LIST_PAGE_SIZE = 20
+
+
+def paginate_list(request, queryset):
+    """
+    Returns (page, query_string) for a list view: the requested page of the
+    queryset, and the current GET parameters minus 'page' so the template can
+    keep filters and sort in its page links.
+    """
+    page = Paginator(queryset, LIST_PAGE_SIZE).get_page(request.GET.get('page'))
+    params = request.GET.copy()
+    params.pop('page', None)
+    return page, params.urlencode()
+
+
 def gig_listings(request):
     """
     Handles the main Gig list page with dropdown filtering and sorting.
@@ -80,6 +96,8 @@ def gig_listings(request):
     else:
         gigs_queryset = gigs_queryset.order_by('deadline') 
     
+    gigs_page, page_query = paginate_list(request, gigs_queryset)
+
     # Track user interactions if logged in
     applied_gig_ids = []
     accepted_gig_ids = []
@@ -91,7 +109,9 @@ def gig_listings(request):
         bookmarked_gig_ids = request.user.saved_gigs.values_list('id', flat=True)
 
     context = {
-        'gigs': gigs_queryset,
+        'gigs': gigs_page,
+        'page_obj': gigs_page,
+        'page_query': page_query,
         'applied_gig_ids': applied_gig_ids,
         'accepted_gig_ids': accepted_gig_ids,
         'selected_instrument': instrument_filter,
@@ -136,9 +156,12 @@ def musicians_list(request):
     
     if instrument_filter:
         musicians = musicians.filter(instruments__icontains=instrument_filter)
-        
+
+    musicians_page, page_query = paginate_list(request, musicians.order_by('id'))
     return render(request, 'gigs/musicians_list.html', {
-        'musicians': musicians, 
+        'musicians': musicians_page,
+        'page_obj': musicians_page,
+        'page_query': page_query,
         'selected_instrument': instrument_filter
     })
 
@@ -165,8 +188,12 @@ def bands_list(request):
     """
     Shows the page for browsing all registered bands.
     """
-    bands = Band.objects.all()
-    return render(request, 'gigs/bands_list.html', {'bands': bands})
+    bands_page, page_query = paginate_list(request, Band.objects.order_by('id'))
+    return render(request, 'gigs/bands_list.html', {
+        'bands': bands_page,
+        'page_obj': bands_page,
+        'page_query': page_query,
+    })
 
 
 def band_detail(request, id):
