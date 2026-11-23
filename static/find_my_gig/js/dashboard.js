@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             fetch('/dashboard/my-profile/update/', requestConfig)
-                .then(response => response.json())
+                .then(response => readJson(response))
                 .then(data => handleProfileUpdateResponse(data))
                 .catch(() => {
                     // Fallback success if response parsing fails but request succeeded
@@ -163,7 +163,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         'Content-Type': 'application/json'
                     }
                 })
-                .then(response => response.json())
+                .then(response => readJson(response))
                 .then(data => {
                     if (data.success) {
                         window.location.href = '/';
@@ -193,11 +193,13 @@ document.addEventListener('DOMContentLoaded', function () {
                         'Content-Type': 'application/json'
                     }
                 })
-                .then(response => response.json())
+                .then(response => readJson(response))
                 .then(data => {
                     if (data.success) {
                         applicationCard.remove();
                         showStatusMessage('status-message', 'Application withdrawn', 'success');
+                    } else {
+                        showStatusMessage('status-message', data.error || data.message || 'Could not withdraw application', 'error');
                     }
                 })
                 .catch(() => {
@@ -221,7 +223,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         'Content-Type': 'application/json'
                     }
                 })
-                .then(response => response.json())
+                .then(response => readJson(response))
                 .then(data => {
                     if (data.success) {
                         const label = APPLICATION_STATUS_LABELS[action];
@@ -271,7 +273,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 },
                 body: JSON.stringify(gigData)
             })
-            .then(response => response.json())
+            .then(response => readJson(response))
             .then(data => {
                 if (data.success) {
                     showStatusMessage('status-message', 'Gig listing created successfully', 'success');
@@ -301,7 +303,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             'Content-Type': 'application/json'
                         }
                     })
-                    .then(response => response.json())
+                    .then(response => readJson(response))
                     .then(data => {
                         if (data.success) {
                             listingCard.remove();
@@ -332,7 +334,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     'Content-Type': 'application/json'
                 }
             })
-            .then(response => response.json())
+            .then(response => readJson(response))
             .then(data => {
                 if (data.success) {
                     savedGigCard?.remove();
@@ -364,7 +366,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         'Content-Type': 'application/json' 
                     }
                 })
-                .then(res => res.json())
+                .then(res => readJson(res))
                 .then(data => {
                     if (data.success) {
                         msgCard.remove();
