@@ -144,6 +144,13 @@ class PopulationScriptGuard(TestCase):
             self.assertTrue(Application.objects.filter(
                 applicant=applicant, listing=review.listing, status=Application.ACCEPTED).exists(), review)
 
+    def test_seeded_gigs_are_all_upcoming(self):
+        """Seed deadlines are relative to today, so the default listing is never empty."""
+        from django.utils import timezone
+        self.run_populate()
+        self.assertEqual(Listing.objects.count(), 30)
+        self.assertFalse(Listing.objects.filter(deadline__lt=timezone.localdate()).exists())
+
     def test_only_demo_accounts_have_usable_passwords(self):
         self.run_populate()
         usable = set(User.objects.filter(is_superuser=False).exclude(password__startswith="!")
