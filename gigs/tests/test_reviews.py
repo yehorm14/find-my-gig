@@ -13,8 +13,9 @@ from gigs.tests.test_views import ViewBaseTestCase
 
 class ReviewBase(ViewBaseTestCase):
     def setUp(self):
-        # The musician has applied to the band's listing, so both flows are eligible by default.
-        Application.objects.create(applicant=self.musician_user, listing=self.listing)
+        # The band accepted the musician's application, so both flows are eligible by default.
+        Application.objects.create(applicant=self.musician_user, listing=self.listing,
+                                   status=Application.ACCEPTED)
 
     def gig_url(self):
         return reverse('gigs:submit_review', args=[self.listing.id])
@@ -82,8 +83,17 @@ class GigReviewTests(ReviewBase):
         Application.objects.all().delete()
         self.login()
         response = self.client.post(self.gig_url(), {'rating': '5', 'comment': 'x'}, follow=True)
-        self.assertContains(response, 'only review gigs you have applied to')
+        self.assertContains(response, 'only review gigs where your application was accepted')
         self.assertFalse(Review.objects.exists())
+
+    def test_pending_or_declined_application_cannot_review_gig(self):
+        self.login()
+        for status in (Application.PENDING, Application.DECLINED):
+            with self.subTest(status=status):
+                Application.objects.update(status=status)
+                response = self.client.post(self.gig_url(), {'rating': '5', 'comment': 'x'}, follow=True)
+                self.assertContains(response, 'application was accepted')
+                self.assertFalse(Review.objects.exists())
 
     def test_duplicate_blocked_with_message(self):
         self.login()
@@ -148,7 +158,7 @@ class MusicianReviewTests(ReviewBase):
         Application.objects.all().delete()
         self.login()
         response = self.client.post(self.musician_url(), {'rating': '5', 'feedback': 'x'}, follow=True)
-        self.assertContains(response, 'applied to one of your gigs')
+        self.assertContains(response, 'accepted for one of your gigs')
         self.assertFalse(Review.objects.exists())
 
     def test_application_to_a_different_band_does_not_count(self):
@@ -157,10 +167,20 @@ class MusicianReviewTests(ReviewBase):
         other_band = Band.objects.create(user=other, name='Other', location='X', bio='b')
         listing = Listing.objects.create(band=other_band, title='t', deadline=date(2026, 5, 1), is_urgent=False,
                                          description='d', location='X', req_instruments='Guitar')
-        Application.objects.create(applicant=self.musician_user, listing=listing)
+        Application.objects.create(applicant=self.musician_user, listing=listing,
+                                   status=Application.ACCEPTED)
         self.login()
         self.client.post(self.musician_url(), {'rating': '5', 'feedback': 'x'})
         self.assertFalse(Review.objects.exists())
+
+    def test_pending_or_declined_application_cannot_be_reviewed_by_band(self):
+        self.login()
+        for status in (Application.PENDING, Application.DECLINED):
+            with self.subTest(status=status):
+                Application.objects.update(status=status)
+                response = self.client.post(self.musician_url(), {'rating': '5', 'feedback': 'x'}, follow=True)
+                self.assertContains(response, 'accepted for one of your gigs')
+                self.assertFalse(Review.objects.exists())
 
     def test_duplicate_blocked(self):
         self.login()

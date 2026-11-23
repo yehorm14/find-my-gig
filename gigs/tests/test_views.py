@@ -75,13 +75,21 @@ class ReviewViewTests(ViewBaseTestCase):
         self.client.login(username='musicianuser', password='pass123')
 
     def test_submit_valid_review(self):
-        Application.objects.create(applicant=self.musician_user, listing=self.listing)
+        Application.objects.create(applicant=self.musician_user, listing=self.listing,
+                                   status=Application.ACCEPTED)
         response = self.client.post(reverse('gigs:submit_review', args=[self.listing.id]), data={
             'rating': '5',
             'comment': 'Awesome band!'
         })
         self.assertEqual(response.status_code, 302) 
         self.assertTrue(Review.objects.filter(reviewer=self.musician_user, listing=self.listing).exists())
+
+    def test_review_refused_until_application_accepted(self):
+        Application.objects.create(applicant=self.musician_user, listing=self.listing)
+        response = self.client.post(reverse('gigs:submit_review', args=[self.listing.id]), data={
+            'rating': '5', 'comment': 'Awesome band!'})
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Review.objects.exists())
 
     def test_duplicate_review_blocked(self):
         """EDGE CASE: Submitting two reviews for the exact same gig is forbidden"""
@@ -197,6 +205,84 @@ class DataDeletionTests(ViewBaseTestCase):
         response = self.client.post(reverse('gigs:delete_listing', args=[self.listing.id]))
         self.assertEqual(response.json()['success'], True)
         self.assertFalse(Listing.objects.filter(id=self.listing.id).exists())
+
+class ApplicationDecisionTests(ViewBaseTestCase):
+    """Bands accept or decline applications to their own listings (issue #12)."""
+
+    def setUp(self):
+        self.application = Application.objects.create(applicant=self.musician_user, listing=self.listing)
+        self.other_band_user = User.objects.create_user(username="otherband", password="pass123")
+        Band.objects.create(user=self.other_band_user, name="Other Band")
+
+    def url(self, action, pk=None):
+        return reverse(f'gigs:{action}_application', args=[pk or self.application.id])
+
+    def status(self):
+        self.application.refresh_from_db()
+        return self.application.status
+
+    def test_default_status_is_pending(self):
+        self.assertEqual(self.status(), 'Pending')
+
+    def test_owner_can_accept_and_decline(self):
+        self.client.login(username='banduser', password='pass123')
+        response = self.client.post(self.url('accept'))
+        self.assertEqual(response.json(), {'success': True, 'status': 'Accepted'})
+        self.assertEqual(self.status(), 'Accepted')
+        response = self.client.post(self.url('decline'))
+        self.assertEqual(response.json(), {'success': True, 'status': 'Declined'})
+        self.assertEqual(self.status(), 'Declined')
+
+    def test_other_band_cannot_change_status(self):
+        self.client.login(username='otherband', password='pass123')
+        for action in ('accept', 'decline'):
+            response = self.client.post(self.url(action))
+            self.assertEqual(response.json(), {'success': False, 'error': 'not_found'})
+            self.assertEqual(self.status(), 'Pending')
+
+    def test_musician_cannot_change_status(self):
+        self.client.login(username='musicianuser', password='pass123')
+        for action in ('accept', 'decline'):
+            response = self.client.post(self.url(action))
+            self.assertEqual(response.json(), {'success': False, 'error': 'not_a_band'})
+            self.assertEqual(self.status(), 'Pending')
+
+    def test_anonymous_cannot_change_status(self):
+        for action in ('accept', 'decline'):
+            self.assertFalse(self.client.post(self.url(action)).json()['success'])
+            self.assertEqual(self.status(), 'Pending')
+
+    def test_get_is_rejected_and_changes_nothing(self):
+        self.client.login(username='banduser', password='pass123')
+        self.assertEqual(self.client.get(self.url('accept')).json()['error'], 'invalid_request')
+        self.assertEqual(self.status(), 'Pending')
+
+    def test_unknown_application_is_not_found(self):
+        self.client.login(username='banduser', password='pass123')
+        self.assertEqual(self.client.post(self.url('accept', 999999)).json()['error'], 'not_found')
+
+    def test_csrf_is_enforced(self):
+        from django.test import Client
+        client = Client(enforce_csrf_checks=True)
+        client.login(username='banduser', password='pass123')
+        self.assertEqual(client.post(self.url('accept')).status_code, 403)
+        self.assertEqual(self.status(), 'Pending')
+
+    def test_band_listings_page_shows_applicants_and_buttons(self):
+        self.client.login(username='banduser', password='pass123')
+        response = self.client.get(reverse('gigs:my_listings'))
+        self.assertContains(response, 'accept-application-btn')
+        self.assertContains(response, 'decline-application-btn')
+        self.assertContains(response, 'musicianuser')
+
+    def test_musician_sees_status_on_my_applications(self):
+        self.client.login(username='musicianuser', password='pass123')
+        self.assertContains(self.client.get(reverse('gigs:my_applications')), 'Status: Pending')
+        Application.objects.update(status=Application.ACCEPTED)
+        self.assertContains(self.client.get(reverse('gigs:my_applications')), 'Status: Accepted')
+        Application.objects.update(status=Application.DECLINED)
+        self.assertContains(self.client.get(reverse('gigs:my_applications')), 'Status: Declined')
+
 
 class DateFilterTests(ViewBaseTestCase):
     def test_invalid_date_is_ignored(self):

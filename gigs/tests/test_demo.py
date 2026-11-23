@@ -79,6 +79,7 @@ class DemoModeTests(DemoBase):
             self.assertEqual(self.client.get(reverse(f'gigs:{name}')).status_code, 200, name)
 
     def test_demo_user_cannot_write(self):
+        self.application = Application.objects.create(applicant=self.musician_user, listing=self.listing)
         self.client.post(reverse('gigs:demo_start', args=['musician']))
         before = (Application.objects.count(), Listing.objects.count(), Review.objects.count())
         bio = Musician.objects.get(pk=self.musician.pk).bio
@@ -91,6 +92,8 @@ class DemoModeTests(DemoBase):
             reverse('gigs:create_gig_listing'),
             reverse('gigs:delete_listing', args=[self.listing.id]),
             reverse('gigs:send_interest', args=[self.musician.id]),
+            reverse('gigs:accept_application', args=[self.application.id]),
+            reverse('gigs:decline_application', args=[self.application.id]),
         ]
         for url in attempts:
             r = self.client.post(url, data=json.dumps({'bio': 'hacked'}),
@@ -104,8 +107,21 @@ class DemoModeTests(DemoBase):
         self.assertEqual(r.status_code, 403)
         self.assertContains(r, 'read-only', status_code=403)
         self.assertEqual(before, (Application.objects.count(), Listing.objects.count(), Review.objects.count()))
+        self.application.refresh_from_db()
+        self.assertEqual(self.application.status, 'Pending')
         self.assertEqual(Musician.objects.get(pk=self.musician.pk).bio, bio)
         self.assertTrue(User.objects.filter(pk=self.musician_user.pk).exists())
+
+    def test_band_demo_cannot_accept_or_decline(self):
+        application = Application.objects.create(applicant=self.musician_user, listing=self.listing)
+        self.client.post(reverse('gigs:demo_start', args=['band']))
+        for action in ('accept', 'decline'):
+            r = self.client.post(reverse(f'gigs:{action}_application', args=[application.id]),
+                                 content_type='application/json', data='{}')
+            self.assertEqual(r.status_code, 403)
+            self.assertEqual(r.json()['error'], 'demo_read_only')
+        application.refresh_from_db()
+        self.assertEqual(application.status, 'Pending')
 
     def test_anonymous_and_real_logins_cannot_write(self):
         before = User.objects.count()

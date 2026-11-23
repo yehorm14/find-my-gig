@@ -47,6 +47,28 @@
                   </div>
                   
               </div>
+
+              <div class="mt-4 pt-3 border-top-accent">
+                  <h5 class="mb-3" style="color: #fff; font-weight: 600;">Applicants ({{ gig.applications_received.all|length }})</h5>
+                  {% for application in gig.applications_received.all %}
+                      <div class="applicant-row d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2" data-application-id="{{ application.id }}">
+                          <div>
+                              {% if application.applicant.musician %}
+                                  <a href="{% url 'gigs:musician_detail' application.applicant.musician.id %}" class="gig-accent-text">{{ application.applicant.username }}</a>
+                              {% else %}
+                                  <span class="gig-accent-text">{{ application.applicant.username }}</span>
+                              {% endif %}
+                              <span class="badge application-status status-{{ application.status|lower }} rounded-pill ms-2">{{ application.get_status_display }}</span>
+                          </div>
+                          <div class="d-flex gap-2">
+                              <button type="button" class="accept-application-btn btn btn-sm btn-outline-success rounded-pill px-3" data-application-id="{{ application.id }}" {% if application.status == 'Accepted' %}disabled{% endif %}>Accept</button>
+                              <button type="button" class="decline-application-btn btn btn-sm btn-outline-danger rounded-pill px-3" data-application-id="{{ application.id }}" {% if application.status == 'Declined' %}disabled{% endif %}>Decline</button>
+                          </div>
+                      </div>
+                  {% empty %}
+                      <p class="text-muted-custom small mb-0">No applications yet.</p>
+                  {% endfor %}
+              </div>
           </div>
           
         {% empty %}

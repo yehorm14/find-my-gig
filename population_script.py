@@ -274,9 +274,17 @@ def populate(reset=False):
         # Pick 1 to 3 random musicians to apply for each gig
         applicants = random.sample(musicians_list, random.randint(1, 3))
         
-        for applicant in applicants:
-            Application.objects.create(applicant=applicant.user, listing=listing)
-            
+        for index, applicant in enumerate(applicants):
+            # The first applicant of every gig is accepted so each listing has
+            # an accepted musician; the rest are a mix of statuses.
+            status = Application.ACCEPTED if index == 0 else random.choice(
+                [Application.ACCEPTED, Application.PENDING, Application.DECLINED])
+            Application.objects.create(applicant=applicant.user, listing=listing, status=status)
+
+            # Reviews in both directions require an Accepted application.
+            if status != Application.ACCEPTED:
+                continue
+
             # 50% chance the Musician reviewed the Band (with the Listing ID)
             if random.choice([True, False]):
                 Review.objects.create(

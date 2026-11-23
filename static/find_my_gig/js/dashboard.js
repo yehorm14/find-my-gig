@@ -208,6 +208,38 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
+    // Accept / Decline an application (band)
+    const APPLICATION_STATUS_LABELS = { accept: 'Accepted', decline: 'Declined' };
+    ['accept', 'decline'].forEach(function (action) {
+        document.querySelectorAll(`.${action}-application-btn`).forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const row = this.closest('.applicant-row');
+                fetch(`/dashboard/my-listings/applications/${this.dataset.applicationId}/${action}/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken'),
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const label = APPLICATION_STATUS_LABELS[action];
+                        const badge = row.querySelector('.application-status');
+                        badge.textContent = label;
+                        badge.className = `badge application-status status-${label.toLowerCase()} rounded-pill ms-2`;
+                        row.querySelector('.accept-application-btn').disabled = (action === 'accept');
+                        row.querySelector('.decline-application-btn').disabled = (action === 'decline');
+                        showStatusMessage('status-message', `Application ${label.toLowerCase()}`, 'success');
+                    } else {
+                        showStatusMessage('status-message', data.message || data.error || 'Something went wrong', 'error');
+                    }
+                })
+                .catch(() => showStatusMessage('status-message', 'Network error.', 'error'));
+            });
+        });
+    });
+
     // Create Gig Listing
     const createGigBtn = document.getElementById('create-gig-btn');
     if (createGigBtn) {

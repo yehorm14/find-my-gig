@@ -9,6 +9,7 @@ from django.http import JsonResponse
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models import Prefetch
 from django.contrib.auth import login, logout
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
@@ -81,14 +82,18 @@ def gig_listings(request):
     
     # Track user interactions if logged in
     applied_gig_ids = []
+    accepted_gig_ids = []
     bookmarked_gig_ids = []
     if request.user.is_authenticated:
         applied_gig_ids = Application.objects.filter(applicant=request.user).values_list('listing_id', flat=True)
+        accepted_gig_ids = Application.objects.filter(
+            applicant=request.user, status=Application.ACCEPTED).values_list('listing_id', flat=True)
         bookmarked_gig_ids = request.user.saved_gigs.values_list('id', flat=True)
 
     context = {
         'gigs': gigs_queryset,
         'applied_gig_ids': applied_gig_ids,
+        'accepted_gig_ids': accepted_gig_ids,
         'selected_instrument': instrument_filter,
         'selected_date': date_query,
         'current_sort': sort_by,
@@ -256,7 +261,9 @@ def my_listings(request):
     """
     try:
         band = request.user.band
-        listings = Listing.objects.filter(band=band)
+        listings = Listing.objects.filter(band=band).prefetch_related(
+            Prefetch('applications_received',
+                     queryset=Application.objects.select_related('applicant__musician').order_by('date_applied')))
     except Band.DoesNotExist:
         listings = []
         
@@ -579,6 +586,37 @@ def apply_gig(request, listing):
     return json_success()
 
 
+def _set_application_status(request, application_id, status):
+    """
+    Shared body of the accept/decline endpoints. Only the band that owns the
+    application's listing may change it; anyone else gets the same 'not_found'
+    as for a missing application, and nothing is changed.
+    """
+    if request.method != 'POST':
+        return json_error('invalid_request')
+    if not request.user.is_authenticated:
+        return json_error('not_logged_in')
+    if not hasattr(request.user, 'band'):
+        return json_error('not_a_band')
+    try:
+        application = Application.objects.get(id=application_id, listing__band=request.user.band)
+    except Application.DoesNotExist:
+        return json_error('not_found')
+    application.status = status
+    application.save(update_fields=['status'])
+    return json_success(status=application.status)
+
+
+def accept_application(request, application_id):
+    """Allows a Band to accept an application to one of its listings."""
+    return _set_application_status(request, application_id, Application.ACCEPTED)
+
+
+def decline_application(request, application_id):
+    """Allows a Band to decline an application to one of its listings."""
+    return _set_application_status(request, application_id, Application.DECLINED)
+
+
 @listing_action
 def withdraw_gig(request, listing):
     """Deletes an Application linking a Musician to a Gig."""
@@ -605,7 +643,7 @@ def unsave_gig(request, listing):
 # ==============================================================================
 @login_required
 def submit_review(request, gig_id):
-    """A musician who applied to a gig reviews the band behind it (see gigs/reviews.py)."""
+    """A musician accepted for a gig reviews the band behind it (see gigs/reviews.py)."""
     listing = get_object_or_404(Listing, id=gig_id)
     target_user = listing.band.user
 
@@ -644,7 +682,7 @@ def submit_review(request, gig_id):
 
 @login_required
 def submit_musician_review(request, musician_id):
-    """A band reviews a musician who applied to one of its gigs (see gigs/reviews.py)."""
+    """A band reviews a musician it accepted for one of its gigs (see gigs/reviews.py)."""
     musician = get_object_or_404(Musician, id=musician_id)
 
     problem = musician_review_problem(request.user, musician)

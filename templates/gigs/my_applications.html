@@ -24,6 +24,7 @@
                 
                 <div class="col-md-5 mb-4 mb-md-0">
                     <h4 class="mb-1" style="font-weight: 700; color: #fff;">{{ application.listing.title }}</h4>
+                    <span class="badge application-status status-{{ application.status|lower }} rounded-pill mb-2">Status: {{ application.get_status_display }}</span>
                     <p class="gig-accent-text mb-3">{{ application.listing.band.name }}</p>
                     
                     <div class="d-flex flex-column gap-2 mb-3">

@@ -162,10 +162,19 @@ class Listing(models.Model):
 # ==========================================
 
 class Application(models.Model):
+    PENDING = 'Pending'
+    ACCEPTED = 'Accepted'
+    DECLINED = 'Declined'
+    STATUS_CHOICES = [
+        (PENDING, 'Pending'),
+        (ACCEPTED, 'Accepted'),
+        (DECLINED, 'Declined'),
+    ]
+
     applicant = models.ForeignKey(User, on_delete=models.CASCADE, related_name="applications_sent")
     listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name="applications_received")
     date_applied = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(max_length=20, default='Pending')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=PENDING)
 
     class Meta:
         constraints = [
@@ -182,12 +191,13 @@ class Review(models.Model):
 
     Review policy (enforced in gigs/views.py via gigs/reviews.py, and by the
     constraints below for rules that must hold under concurrent submissions):
-      * Gig review: a musician reviews the band behind a listing they applied to
+      * Gig review: a musician reviews the band behind a listing where their
+        application was accepted
         (reviewee = listing.band.user, listing set). One per reviewer and listing.
         (The constraint is per reviewer, reviewee and listing, so a band may also
         review each applicant of a gig, as the demo seed data does.)
-      * Musician review: a band reviews a musician who applied to one of the
-        band's listings (listing left empty). One per band and musician.
+      * Musician review: a band reviews a musician whose application to one of
+        the band's listings it accepted (listing left empty). One per band and musician.
       * Rating is an integer from 1 to 5; the comment is required in the forms.
       * Nobody can review themselves.
     """
