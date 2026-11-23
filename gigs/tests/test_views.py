@@ -1,7 +1,8 @@
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth.models import User
-from datetime import date
+from datetime import date, timedelta
+from django.utils import timezone
 import json
 
 from gigs.models import Musician, Band, Listing, Application, Review
@@ -16,7 +17,7 @@ class ViewBaseTestCase(TestCase):
         cls.musician = Musician.objects.create(user=cls.musician_user, bio="Musician bio", age=21, instruments="Guitar", location="Glasgow")
 
         cls.listing = Listing.objects.create(
-            band=cls.band, title="Guitarist needed", deadline=date(2026, 4, 1),
+            band=cls.band, title="Guitarist needed", deadline=timezone.localdate() + timedelta(days=30),
             is_urgent=False, description="Need a guitarist", location="Glasgow", req_instruments="Guitar"
         )
 
@@ -112,7 +113,7 @@ class SecurityViewTests(TestCase):
         cls.band_user = User.objects.create_user(username="secureband", email="band@test.com", password="pass")
         cls.band = Band.objects.create(user=cls.band_user, name="Secure Band", location="Glasgow")
         cls.listing = Listing.objects.create(
-            band=cls.band, title="Gig", deadline=date(2026, 4, 1),
+            band=cls.band, title="Gig", deadline=timezone.localdate() + timedelta(days=30),
             is_urgent=False,
             description="Desc", location="Glasgow", req_instruments="Guitar"
         )
@@ -298,10 +299,11 @@ class DateFilterTests(ViewBaseTestCase):
         self.assertNotIn(self.listing, response.context['gigs'])
 
     def test_valid_date_still_filters(self):
-        match = self.client.get(reverse('gigs:gig_listings'), {'date': '2026-04-01'})
+        day = self.listing.deadline
+        match = self.client.get(reverse('gigs:gig_listings'), {'date': day.isoformat()})
         self.assertIn(self.listing, match.context['gigs'])
-        self.assertEqual(match.context['selected_date'], '2026-04-01')
-        miss = self.client.get(reverse('gigs:gig_listings'), {'date': '2026-04-02'})
+        self.assertEqual(match.context['selected_date'], day.isoformat())
+        miss = self.client.get(reverse('gigs:gig_listings'), {'date': (day + timedelta(days=1)).isoformat()})
         self.assertNotIn(self.listing, miss.context['gigs'])
 
 
@@ -349,3 +351,56 @@ class BandApplyRestrictionTests(ViewBaseTestCase):
         response = self.client.post(reverse('gigs:apply_gig', args=[self.listing.id]))
         self.assertEqual(response.json(), {'success': False, 'error': 'own_gig'})
         self.assertFalse(Application.objects.filter(listing=self.listing).exists())
+
+
+
+class PastGigTests(ViewBaseTestCase):
+    """Past gigs are hidden by default, cannot be posted and cannot be applied to (issue #16)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.past = Listing.objects.create(
+            band=cls.band, title="Old gig", deadline=timezone.localdate() - timedelta(days=1),
+            is_urgent=False, description="Gone", location="Glasgow", req_instruments="Guitar")
+        cls.today = Listing.objects.create(
+            band=cls.band, title="Today gig", deadline=timezone.localdate(),
+            is_urgent=False, description="Now", location="Glasgow", req_instruments="Guitar")
+
+    def test_past_gigs_hidden_by_default(self):
+        gigs = self.client.get(reverse('gigs:gig_listings')).context['gigs']
+        self.assertIn(self.listing, gigs)
+        self.assertIn(self.today, gigs)
+        self.assertNotIn(self.past, gigs)
+
+    def test_past_gigs_shown_with_toggle(self):
+        response = self.client.get(reverse('gigs:gig_listings'), {'show_past': '1'})
+        self.assertIn(self.past, response.context['gigs'])
+        self.assertTrue(response.context['show_past'])
+
+    def test_posting_past_date_is_invalid_data(self):
+        self.client.login(username='banduser', password='pass123')
+        payload = {'title': 't', 'req_instruments': 'Guitar', 'description': 'd', 'location': 'Glasgow',
+                   'date': str(timezone.localdate() - timedelta(days=1))}
+        response = self.client.post(reverse('gigs:create_gig_listing'), data=json.dumps(payload),
+                                    content_type='application/json')
+        self.assertEqual(response.json(), {'success': False, 'error': 'invalid_data'})
+        self.assertFalse(Listing.objects.filter(title='t').exists())
+
+    def test_posting_today_is_allowed(self):
+        self.client.login(username='banduser', password='pass123')
+        payload = {'title': 't', 'req_instruments': 'Guitar', 'description': 'd', 'location': 'Glasgow',
+                   'date': str(timezone.localdate())}
+        response = self.client.post(reverse('gigs:create_gig_listing'), data=json.dumps(payload),
+                                    content_type='application/json')
+        self.assertTrue(response.json()['success'])
+
+    def test_applying_to_past_gig_refused(self):
+        self.client.login(username='musicianuser', password='pass123')
+        response = self.client.post(reverse('gigs:apply_gig', args=[self.past.id]))
+        self.assertEqual(response.json(), {'success': False, 'error': 'deadline_passed'})
+        self.assertFalse(Application.objects.filter(listing=self.past).exists())
+
+    def test_applying_on_deadline_day_allowed(self):
+        self.client.login(username='musicianuser', password='pass123')
+        self.assertTrue(self.client.post(reverse('gigs:apply_gig', args=[self.today.id])).json()['success'])
