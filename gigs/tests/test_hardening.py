@@ -135,6 +135,15 @@ class PopulationScriptGuard(TestCase):
         self.assertFalse(User.objects.filter(username="real_user").exists())
         self.assertEqual(Band.objects.count(), 10)
 
+    def test_seeded_reviews_match_accepted_applications(self):
+        from gigs.models import Application, Review
+        self.run_populate()
+        self.assertTrue(Application.objects.filter(status=Application.ACCEPTED).exists())
+        for review in Review.objects.filter(listing__isnull=False):
+            applicant = review.reviewer if review.reviewer != review.listing.band.user else review.reviewee
+            self.assertTrue(Application.objects.filter(
+                applicant=applicant, listing=review.listing, status=Application.ACCEPTED).exists(), review)
+
     def test_only_demo_accounts_have_usable_passwords(self):
         self.run_populate()
         usable = set(User.objects.filter(is_superuser=False).exclude(password__startswith="!")

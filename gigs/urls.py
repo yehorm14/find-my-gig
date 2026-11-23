@@ -56,6 +56,8 @@ urlpatterns = [
     path('dashboard/my-profile/delete-account/', views.delete_account, name='delete_account'),
     path('dashboard/my-listings/create/', views.create_gig_listing, name='create_gig_listing'), 
     path('dashboard/my-listings/<int:listing_id>/delete/', views.delete_listing, name='delete_listing'),
+    path('dashboard/my-listings/applications/<int:application_id>/accept/', views.accept_application, name='accept_application'),
+    path('dashboard/my-listings/applications/<int:application_id>/decline/', views.decline_application, name='decline_application'),
     path('dashboard/inbox/', views.my_inbox, name='my_inbox'),
     path('dashboard/inbox/<int:interest_id>/delete/', views.delete_interest, name='delete_interest'),
 

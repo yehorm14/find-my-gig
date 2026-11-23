@@ -339,3 +339,8 @@ body {
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); /* Adds a very soft drop shadow */
     margin-top: 0; /* Ensures it sits exactly at the top edge */
 }
+/* Application status badges (My Applications / My Listings) */
+.application-status { font-size: 0.8rem; padding: 0.4em 0.8em; color: #fff; }
+.application-status.status-pending { background-color: #6c757d; }
+.application-status.status-accepted { background-color: #198754; }
+.application-status.status-declined { background-color: var(--neon-red); }

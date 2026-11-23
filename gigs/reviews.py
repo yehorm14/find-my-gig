@@ -2,12 +2,12 @@
 Review eligibility rules and input validation, shared by both review flows.
 
 Policy (see also the Review model docstring):
-  * Gig review: the reviewer must be a musician with an Application for the
-    listing. The reviewee is the band that owns the listing.
+  * Gig review: the reviewer must be a musician with an Accepted Application
+    for the listing. The reviewee is the band that owns the listing.
   * Musician review: the reviewer must be a band, and the musician must have an
-    Application for one of that band's listings.
-  * There is no "completed gig" state in the data model, so an application of
-    any status counts as the relationship.
+    Accepted Application for one of that band's listings.
+  * There is no "completed gig" state in the data model, so an accepted
+    application is what counts as the relationship; Pending and Declined do not.
 """
 from django import forms
 
@@ -32,8 +32,9 @@ def gig_review_problem(reviewer, listing):
         return "You cannot review your own gig."
     if not hasattr(reviewer, 'musician'):
         return "Only musicians can review a gig."
-    if not Application.objects.filter(applicant=reviewer, listing=listing).exists():
-        return "You can only review gigs you have applied to."
+    if not Application.objects.filter(
+            applicant=reviewer, listing=listing, status=Application.ACCEPTED).exists():
+        return "You can only review gigs where your application was accepted."
     if Review.objects.filter(reviewer=reviewer, listing=listing).exists():
         return "You have already left a review for this gig!"
     return None
@@ -45,8 +46,9 @@ def musician_review_problem(reviewer, musician):
         return "You cannot review yourself."
     if not hasattr(reviewer, 'band'):
         return "Only bands can review musicians."
-    if not Application.objects.filter(applicant=musician.user, listing__band=reviewer.band).exists():
-        return "You can only review musicians who have applied to one of your gigs."
+    if not Application.objects.filter(
+            applicant=musician.user, listing__band=reviewer.band, status=Application.ACCEPTED).exists():
+        return "You can only review musicians you have accepted for one of your gigs."
     if Review.objects.filter(reviewer=reviewer, reviewee=musician.user, listing__isnull=True).exists():
         return "You have already reviewed this musician."
     return None
