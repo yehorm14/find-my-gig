@@ -562,7 +562,11 @@ def listing_action(view_func):
 
 @listing_action
 def apply_gig(request, listing):
-    """Creates an Application linking a Musician to a Gig."""
+    """Creates an Application linking a Musician to a Gig. Bands cannot apply."""
+    if not hasattr(request.user, 'musician'):
+        return json_error('not_a_musician')
+    if listing.band.user == request.user:
+        return json_error('own_gig')
     if Application.objects.filter(applicant=request.user, listing=listing).exists():
         return json_error('already_applied')
 
