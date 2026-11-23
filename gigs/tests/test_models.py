@@ -11,8 +11,10 @@ class BaseTestCase(TestCase):
         cls.test_user1 = User.objects.create_superuser(username="thierrycnf", email="musician1@example.com", password="lol")
         cls.test_user2 = User.objects.create_user(username="notchface", email="musician2@example.com", password="haha")
         
+        # One review per reviewee: a reviewer can only review the same user once.
         for i in range(20):
-            Review.objects.create(reviewer=cls.test_user1, reviewee=cls.test_user2, rating=5, comment="")
+            reviewee = User.objects.create_user(username=f"reviewee{i}", password="x")
+            Review.objects.create(reviewer=cls.test_user1, reviewee=reviewee, rating=5, comment="")
 
 class MusicianTest(BaseTestCase):
     @classmethod

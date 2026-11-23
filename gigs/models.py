@@ -177,11 +177,39 @@ class Application(models.Model):
 
 
 class Review(models.Model):
+    """
+    A review left by one user about another.
+
+    Review policy (enforced in gigs/views.py via gigs/reviews.py, and by the
+    constraints below for rules that must hold under concurrent submissions):
+      * Gig review: a musician reviews the band behind a listing they applied to
+        (reviewee = listing.band.user, listing set). One per reviewer and listing.
+        (The constraint is per reviewer, reviewee and listing, so a band may also
+        review each applicant of a gig, as the demo seed data does.)
+      * Musician review: a band reviews a musician who applied to one of the
+        band's listings (listing left empty). One per band and musician.
+      * Rating is an integer from 1 to 5; the comment is required in the forms.
+      * Nobody can review themselves.
+    """
     reviewer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="reviews_written")
     reviewee = models.ForeignKey(User, on_delete=models.CASCADE, related_name="reviews_received")
     listing = models.ForeignKey(Listing, on_delete=models.CASCADE, null=True, blank=True, related_name='reviews')
     rating = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
     comment = models.TextField(200)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(rating__gte=1, rating__lte=5), name='review_rating_between_1_and_5'),
+            models.CheckConstraint(
+                check=~models.Q(reviewer=models.F('reviewee')), name='review_not_self'),
+            models.UniqueConstraint(
+                fields=['reviewer', 'reviewee', 'listing'], condition=models.Q(listing__isnull=False),
+                name='unique_review_per_reviewer_reviewee_listing'),
+            models.UniqueConstraint(
+                fields=['reviewer', 'reviewee'], condition=models.Q(listing__isnull=True),
+                name='unique_direct_review_per_reviewer_reviewee'),
+        ]
 
     def __str__(self):
         return f"Review by {self.reviewer.username} for {self.reviewee.username}"

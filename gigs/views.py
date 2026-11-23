@@ -27,6 +27,7 @@ from gigs.forms import (
     UserSignUpForm, MusicianProfileForm, BandProfileForm,
     AccountEditForm, MusicianEditForm, BandEditForm,
 )
+from gigs.reviews import ReviewForm, gig_review_problem, musician_review_problem
 
 # Set up a logger for tracking issues in production
 logger = logging.getLogger(__name__)
@@ -95,17 +96,20 @@ def gig_detail(request, gig_id):
     has_applied = False
     is_bookmarked = False
     has_reviewed = False 
+    can_review = False
     
     if request.user.is_authenticated:
         has_applied = listing.applications_received.filter(applicant=request.user).exists()
         is_bookmarked = listing.bookmarks.filter(id=request.user.id).exists()
         has_reviewed = Review.objects.filter(reviewer=request.user, listing=listing).exists()
+        can_review = gig_review_problem(request.user, listing) is None
 
     context = {
         'listing': listing, 
         'has_applied': has_applied,
         'is_bookmarked': is_bookmarked,
         'has_reviewed': has_reviewed,
+        'can_review': can_review,
         'google_maps_frontend_key': settings.GOOGLE_MAPS_FRONTEND_KEY, 
     }
     
@@ -133,10 +137,13 @@ def musician_detail(request, id):
     """
     musician = get_object_or_404(Musician, id=id)
     reviews = Review.objects.filter(reviewee=musician.user).order_by('-id')
+    can_review = (request.user.is_authenticated
+                  and musician_review_problem(request.user, musician) is None)
     
     context = {
         'musician': musician,
         'reviews': reviews,
+        'can_review': can_review,
         'google_maps_frontend_key': settings.GOOGLE_MAPS_FRONTEND_KEY,
     }
     return render(request, 'gigs/musician_detail.html', context)
@@ -587,62 +594,74 @@ def unsave_gig(request, listing):
 # ==============================================================================
 @login_required
 def submit_review(request, gig_id):
-    """Handles the submission of a review for a specific gig."""
+    """A musician who applied to a gig reviews the band behind it (see gigs/reviews.py)."""
     listing = get_object_or_404(Listing, id=gig_id)
-    target_user = listing.band.user  
-    already_reviewed = Review.objects.filter(reviewer=request.user, listing=listing).exists()
-    
-    if already_reviewed:
-        messages.error(request, "You have already left a review for this gig!")
+    target_user = listing.band.user
+
+    problem = gig_review_problem(request.user, listing)
+    if problem:
+        messages.error(request, problem)
         return redirect('gigs:gig_detail', gig_id=listing.id)
 
+    form = ReviewForm(request.POST or None)
+    status = 200
     if request.method == 'POST':
-        rating = request.POST.get('rating')
-        comment = request.POST.get('comment')
-        
-        if rating and comment:
-            Review.objects.create(
-                reviewer=request.user,
-                reviewee=target_user,
-                listing=listing, 
-                rating=int(rating),
-                comment=comment
-            )
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    Review.objects.create(
+                        reviewer=request.user,
+                        reviewee=target_user,
+                        listing=listing,
+                        rating=form.cleaned_data['rating'],
+                        comment=form.cleaned_data['comment'],
+                    )
+            except IntegrityError:
+                # A concurrent submission got there first.
+                messages.error(request, "You have already left a review for this gig!")
+                return redirect('gigs:gig_detail', gig_id=listing.id)
             messages.success(request, "Your review has been successfully published!")
             return redirect('gigs:gig_detail', gig_id=listing.id)
-        else:
-            messages.error(request, "Please provide both a rating and a comment.")
+        status = 400
 
     context = {
         'listing': listing,
-        'target_user': target_user
+        'target_user': target_user,
+        'form': form,
     }
-    return render(request, 'gigs/gig_review.html', context)
+    return render(request, 'gigs/gig_review.html', context, status=status)
 
 @login_required
 def submit_musician_review(request, musician_id):
-    """Allows a Band to submit a review for a Musician."""
+    """A band reviews a musician who applied to one of its gigs (see gigs/reviews.py)."""
     musician = get_object_or_404(Musician, id=musician_id)
 
-    if request.method == 'POST':
-        rating = request.POST.get('rating')
-        comment = request.POST.get('feedback')
-
-        if not rating:
-            return render(request, 'gigs/musician_review.html', {
-                'musician': musician,
-                'error': 'Please select a rating'
-            })
-
-        Review.objects.create(
-            reviewer=request.user,
-            reviewee=musician.user,
-            rating=int(rating),
-            comment=comment
-        )
+    problem = musician_review_problem(request.user, musician)
+    if problem:
+        messages.error(request, problem)
         return redirect('gigs:musician_detail', id=musician_id)
 
-    return render(request, 'gigs/musician_review.html', {'musician': musician})
+    form = None
+    status = 200
+    if request.method == 'POST':
+        form = ReviewForm({'rating': request.POST.get('rating'), 'comment': request.POST.get('feedback')})
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    Review.objects.create(
+                        reviewer=request.user,
+                        reviewee=musician.user,
+                        rating=form.cleaned_data['rating'],
+                        comment=form.cleaned_data['comment'],
+                    )
+            except IntegrityError:
+                messages.error(request, "You have already reviewed this musician.")
+                return redirect('gigs:musician_detail', id=musician_id)
+            messages.success(request, "Your review has been published.")
+            return redirect('gigs:musician_detail', id=musician_id)
+        status = 400
+
+    return render(request, 'gigs/musician_review.html', {'musician': musician, 'form': form}, status=status)
 
 
 @login_required

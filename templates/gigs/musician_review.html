@@ -19,8 +19,10 @@
 
       <div class="listing-card p-4 p-md-5">
         
-        {% if error %}
-          <div class="status-error mb-4" style="display: block;">{{ error }}</div>
+        {% if form.errors %}
+          <div class="status-error mb-4" style="display: block;">
+            {% for field, errors in form.errors.items %}{% for error in errors %}<div>{{ error }}</div>{% endfor %}{% endfor %}
+          </div>
         {% endif %}
         
         <form method="POST" action="">
@@ -29,22 +31,22 @@
           <div class="mb-4 text-center">
             <label class="detail-label mb-2">Rating</label>
             <div class="star-rating animated-stars justify-content-center">
-                <input type="radio" id="star5" name="rating" value="5">
+                <input type="radio" id="star5" name="rating" value="5" {% if form.rating.value == "5" %}checked{% endif %}>
                 <label for="star5" class="bi bi-star-fill"></label>
-                <input type="radio" id="star4" name="rating" value="4">
+                <input type="radio" id="star4" name="rating" value="4" {% if form.rating.value == "4" %}checked{% endif %}>
                 <label for="star4" class="bi bi-star-fill"></label>
-                <input type="radio" id="star3" name="rating" value="3">
+                <input type="radio" id="star3" name="rating" value="3" {% if form.rating.value == "3" %}checked{% endif %}>
                 <label for="star3" class="bi bi-star-fill"></label>
-                <input type="radio" id="star2" name="rating" value="2">
+                <input type="radio" id="star2" name="rating" value="2" {% if form.rating.value == "2" %}checked{% endif %}>
                 <label for="star2" class="bi bi-star-fill"></label>
-                <input type="radio" id="star1" name="rating" value="1">
+                <input type="radio" id="star1" name="rating" value="1" {% if form.rating.value == "1" %}checked{% endif %}>
                 <label for="star1" class="bi bi-star-fill"></label>
             </div>
           </div>
 
           <div class="mb-4">
             <label for="feedback" class="detail-label">Feedback</label>
-            <textarea class="form-control" id="feedback" name="feedback" rows="4" placeholder="Share your experience playing with this musician..." style="background-color: var(--bg-dark); color: #fff; border: 1px solid var(--border-dim);" required></textarea>
+            <textarea class="form-control" id="feedback" name="feedback" rows="4" placeholder="Share your experience playing with this musician..." style="background-color: var(--bg-dark); color: #fff; border: 1px solid var(--border-dim);" required>{{ form.comment.value|default_if_none:"" }}</textarea>
           </div>
 
           <button type="submit" class="btn apply-btn rounded-pill w-100 py-2 mt-3" style="font-size: 1.1rem;">
