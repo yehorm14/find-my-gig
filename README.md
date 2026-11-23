@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/yehorm14/find-my-gig/actions/workflows/ci.yml/badge.svg)](https://github.com/yehorm14/find-my-gig/actions/workflows/ci.yml)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue)
-![Django 4.2](https://img.shields.io/badge/django-4.2-0C4B33)
+![Django 5.2](https://img.shields.io/badge/django-5.2-0C4B33)
 
 A Django web app where bands post gigs and musicians find, apply for and review them.
 
@@ -38,7 +38,7 @@ A Django web app where bands post gigs and musicians find, apply for and review 
 
 ## Tech stack
 
-- Backend: Python, Django 4.2, SQLite, gunicorn, WhiteNoise
+- Backend: Python, Django 5.2 LTS, SQLite, gunicorn, WhiteNoise
 - Frontend: Django templates, Bootstrap 5, vanilla JavaScript
 - APIs: Google Maps JavaScript and Geocoding (optional)
 - Tooling: GitHub Actions (Python 3.12), Render
