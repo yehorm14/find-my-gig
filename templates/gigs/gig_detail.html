@@ -5,6 +5,13 @@
 
 {% block body_block %}
 <div id="gig-detail-status" class="container mt-3"></div>
+{% if messages %}
+<div class="container mt-3">
+  {% for message in messages %}
+    <div class="{% if message.tags == 'error' %}status-error{% else %}status-success{% endif %}" style="display: block;">{{ message }}</div>
+  {% endfor %}
+</div>
+{% endif %}
 
 <div class="container mt-4 px-4 px-md-5">
     
