@@ -1,3 +1,4 @@
+import datetime
 import functools
 import json
 import logging
@@ -65,7 +66,13 @@ def gig_listings(request):
     if instrument_filter:
         gigs_queryset = gigs_queryset.filter(req_instruments__icontains=instrument_filter)
     if date_query:
-        gigs_queryset = gigs_queryset.filter(deadline=date_query)
+        try:
+            deadline_filter = datetime.date.fromisoformat(date_query)
+        except ValueError:
+            # Malformed date: ignore the filter and leave the form field empty.
+            date_query = ''
+        else:
+            gigs_queryset = gigs_queryset.filter(deadline=deadline_filter)
 
     # Apply sorting
     if sort_by == 'name':
@@ -562,7 +569,11 @@ def listing_action(view_func):
 
 @listing_action
 def apply_gig(request, listing):
-    """Creates an Application linking a Musician to a Gig."""
+    """Creates an Application linking a Musician to a Gig. Bands cannot apply."""
+    if not hasattr(request.user, 'musician'):
+        return json_error('not_a_musician')
+    if listing.band.user == request.user:
+        return json_error('own_gig')
     if Application.objects.filter(applicant=request.user, listing=listing).exists():
         return json_error('already_applied')
 

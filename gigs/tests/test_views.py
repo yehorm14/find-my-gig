@@ -282,3 +282,70 @@ class ApplicationDecisionTests(ViewBaseTestCase):
         self.assertContains(self.client.get(reverse('gigs:my_applications')), 'Status: Accepted')
         Application.objects.update(status=Application.DECLINED)
         self.assertContains(self.client.get(reverse('gigs:my_applications')), 'Status: Declined')
+
+
+class DateFilterTests(ViewBaseTestCase):
+    def test_invalid_date_is_ignored(self):
+        for bad in ('abc', '2026-13-45', '2026-02-30'):
+            response = self.client.get(reverse('gigs:gig_listings'), {'date': bad})
+            self.assertEqual(response.status_code, 200, bad)
+            self.assertIn(self.listing, response.context['gigs'])
+            self.assertEqual(response.context['selected_date'], '')
+
+    def test_invalid_date_keeps_other_filters(self):
+        response = self.client.get(reverse('gigs:gig_listings'), {'date': 'abc', 'instrument': 'Drums'})
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(self.listing, response.context['gigs'])
+
+    def test_valid_date_still_filters(self):
+        match = self.client.get(reverse('gigs:gig_listings'), {'date': '2026-04-01'})
+        self.assertIn(self.listing, match.context['gigs'])
+        self.assertEqual(match.context['selected_date'], '2026-04-01')
+        miss = self.client.get(reverse('gigs:gig_listings'), {'date': '2026-04-02'})
+        self.assertNotIn(self.listing, miss.context['gigs'])
+
+
+class BandApplyRestrictionTests(ViewBaseTestCase):
+    """Band accounts must not be able to apply to gigs (issue #10)."""
+
+    def setUp(self):
+        self.other_band_user = User.objects.create_user(username="otherband", password="pass123")
+        Band.objects.create(user=self.other_band_user, name="Other Band")
+
+    def test_band_cannot_apply_to_other_bands_gig(self):
+        self.client.login(username='otherband', password='pass123')
+        response = self.client.post(reverse('gigs:apply_gig', args=[self.listing.id]))
+        self.assertEqual(response.json(), {'success': False, 'error': 'not_a_musician'})
+        self.assertFalse(Application.objects.filter(listing=self.listing).exists())
+
+    def test_band_cannot_apply_to_own_gig(self):
+        self.client.login(username='banduser', password='pass123')
+        response = self.client.post(reverse('gigs:apply_gig', args=[self.listing.id]))
+        self.assertEqual(response.json(), {'success': False, 'error': 'not_a_musician'})
+        self.assertFalse(Application.objects.filter(listing=self.listing).exists())
+
+    def test_musician_apply_and_withdraw_still_work(self):
+        self.client.login(username='musicianuser', password='pass123')
+        self.assertTrue(self.client.post(reverse('gigs:apply_gig', args=[self.listing.id])).json()['success'])
+        self.assertTrue(Application.objects.filter(applicant=self.musician_user, listing=self.listing).exists())
+        self.assertTrue(self.client.post(reverse('gigs:withdraw_gig', args=[self.listing.id])).json()['success'])
+        self.assertFalse(Application.objects.filter(applicant=self.musician_user, listing=self.listing).exists())
+
+    def test_apply_button_not_rendered_for_band(self):
+        self.client.login(username='banduser', password='pass123')
+        detail = self.client.get(reverse('gigs:gig_detail', args=[self.listing.id]))
+        self.assertNotContains(detail, 'gig-detail-apply-btn')
+        listings = self.client.get(reverse('gigs:gig_listings'))
+        self.assertNotContains(listings, 'data-gig-id')
+
+    def test_apply_button_rendered_for_musician(self):
+        self.client.login(username='musicianuser', password='pass123')
+        detail = self.client.get(reverse('gigs:gig_detail', args=[self.listing.id]))
+        self.assertContains(detail, 'gig-detail-apply-btn')
+
+    def test_account_owning_the_band_cannot_apply_even_with_musician_profile(self):
+        Musician.objects.create(user=self.band_user)
+        self.client.login(username='banduser', password='pass123')
+        response = self.client.post(reverse('gigs:apply_gig', args=[self.listing.id]))
+        self.assertEqual(response.json(), {'success': False, 'error': 'own_gig'})
+        self.assertFalse(Application.objects.filter(listing=self.listing).exists())
