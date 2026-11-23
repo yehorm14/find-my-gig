@@ -146,6 +146,13 @@ class PopulationScriptGuard(TestCase):
             self.assertTrue(Application.objects.filter(
                 applicant=applicant, listing=review.listing, status=Application.ACCEPTED).exists(), review)
 
+    def test_seeded_gigs_are_all_upcoming(self):
+        """Seed deadlines are relative to today, so the default listing is never empty."""
+        from django.utils import timezone
+        self.run_populate()
+        self.assertEqual(Listing.objects.count(), 30)
+        self.assertFalse(Listing.objects.filter(deadline__lt=timezone.localdate()).exists())
+
     def test_only_demo_accounts_have_usable_passwords(self):
         self.run_populate()
         usable = set(User.objects.filter(is_superuser=False).exclude(password__startswith="!")
@@ -202,12 +209,18 @@ class AjaxErrorStatusCodes(ViewBaseTestCase):
         self.client.post(url, data='{"message": "hi"}', content_type="application/json")
         self.assertJsonError(self.client.post(url, data='{"message": "again"}', content_type="application/json"), 400)
 
+    def test_send_interest_missing_musician_is_json_404(self):
+        self.client.login(username="banduser", password="pass123")
+        response = self.client.post(reverse('gigs:send_interest', args=[999999]),
+                                    data='{"message": "hi"}', content_type="application/json")
+        self.assertJsonError(response, 404, 'not_found')
+
     def test_delete_interest_errors(self):
         self.client.login(username="musicianuser", password="pass123")
-        self.assertJsonError(self.client.post(reverse('gigs:delete_interest', args=[999999])), 404)
+        self.assertJsonError(self.client.post(reverse('gigs:delete_interest', args=[999999])), 404, 'not_found')
         self.assertJsonError(self.client.get(reverse('gigs:delete_interest', args=[999999])), 405)
         self.client.login(username="banduser", password="pass123")
-        self.assertJsonError(self.client.post(reverse('gigs:delete_interest', args=[999999])), 404)
+        self.assertJsonError(self.client.post(reverse('gigs:delete_interest', args=[999999])), 404, 'not_found')
 
     def test_delete_account_get_is_405(self):
         self.client.login(username="musicianuser", password="pass123")

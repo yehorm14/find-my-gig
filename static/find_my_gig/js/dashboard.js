@@ -198,6 +198,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (data.success) {
                         applicationCard.remove();
                         showStatusMessage('status-message', 'Application withdrawn', 'success');
+                    } else {
+                        showStatusMessage('status-message', data.error || data.message || 'Could not withdraw application', 'error');
                     }
                 })
                 .catch(() => {

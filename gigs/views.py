@@ -10,6 +10,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
+from django.utils import timezone
 from django.contrib.auth import login, logout
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
@@ -54,8 +55,13 @@ def home(request):
 def gig_listings(request):
     """
     Handles the main Gig list page with dropdown filtering and sorting.
+    Gigs whose deadline has passed are hidden unless ?show_past=1 is given.
     """
     gigs_queryset = Listing.objects.all()
+
+    show_past = request.GET.get('show_past') == '1'
+    if not show_past:
+        gigs_queryset = gigs_queryset.filter(deadline__gte=timezone.localdate())
 
     # Extract filter and sort parameters from URL
     instrument_filter = request.GET.get('instrument', '')
@@ -97,6 +103,7 @@ def gig_listings(request):
         'selected_instrument': instrument_filter,
         'selected_date': date_query,
         'current_sort': sort_by,
+        'show_past': show_past,
         'bookmarked_gig_ids': bookmarked_gig_ids,
     }
 
@@ -490,6 +497,8 @@ def create_gig_listing(request):
             return json_error('missing_fields', 400)
 
         try:
+            if datetime.date.fromisoformat(str(deadline)) < timezone.localdate():
+                return json_error('invalid_data')
             listing = Listing.objects.create(
                 band=request.user.band,
                 title=title,
@@ -584,6 +593,8 @@ def apply_gig(request, listing):
         return json_error('own_gig', 403)
     if Application.objects.filter(applicant=request.user, listing=listing).exists():
         return json_error('already_applied', 400)
+    if listing.deadline < timezone.localdate():
+        return json_error('deadline_passed', 400)
 
     try:
         with transaction.atomic():
@@ -729,7 +740,10 @@ def send_interest(request, musician_id):
             return json_error('Only bands can send interest.', 403)
 
         band = request.user.band
-        musician = get_object_or_404(Musician, id=musician_id)
+        try:
+            musician = Musician.objects.get(id=musician_id)
+        except Musician.DoesNotExist:
+            return json_error('not_found', 404)
         data = parse_json_body(request)
         if data is None:
             return json_error('invalid_json', 400)
@@ -767,6 +781,6 @@ def delete_interest(request, interest_id):
             interest.delete()
             return json_success()
         except (Musician.DoesNotExist, BandInterest.DoesNotExist):
-            return json_error('Not found.', 404)
+            return json_error('not_found', 404)
             
     return json_error('Invalid request method', 405)

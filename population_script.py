@@ -248,7 +248,7 @@ def populate(reset=False):
     print("Creating 30 Gig Listings...")
     for i in range(30):
         owning_band = random.choice(bands_list)
-        future_date = timezone.now() + timedelta(days=random.randint(1, 60))
+        future_date = timezone.localdate() + timedelta(days=random.randint(1, 60))
         venue = random.choice(UK_VENUES)
         
         listing = Listing.objects.create(
