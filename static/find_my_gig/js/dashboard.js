@@ -1,8 +1,8 @@
 document.addEventListener('DOMContentLoaded', function () {
 
-    let pendingMediaLinks = [];
-    let linksToDelete = [];
-    
+    const mediaState = createMediaState();
+    let profileSaveInFlight = false;
+
     // ==========================================================================
     // --- 1. PROFILE MANAGEMENT ---
     // ==========================================================================
@@ -27,6 +27,13 @@ document.addEventListener('DOMContentLoaded', function () {
             const profileInstruments = document.getElementById('profile-instruments')?.value || '';
             const profilePictureInput = document.getElementById('profile-picture-input');
             const hasPicture = profilePictureInput?.files[0];
+
+            if (profileSaveInFlight) {
+                return;
+            }
+            const edits = mediaState.snapshot();
+            const pendingMediaLinks = edits.links.map(link => link.url);
+            const linksToDelete = edits.deletes;
 
             let requestConfig = {
                 method: 'POST',
@@ -64,16 +71,39 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
             }
 
+            profileSaveInFlight = true;
+            updateProfileBtn.disabled = true;
+
             fetch('/dashboard/my-profile/update/', requestConfig)
-                .then(response => response.json())
-                .then(data => handleProfileUpdateResponse(data))
+                .then(readJsonResponse)
+                .then(data => handleProfileUpdateResponse(data, edits))
                 .catch(() => {
-                    // Fallback success if response parsing fails but request succeeded
-                    showStatusMessage('status-message', 'Profile updated successfully', 'success');
-                    pendingMediaLinks = [];
-                    linksToDelete = [];
+                    // Offline, HTML error page or expired session: nothing was
+                    // saved, so keep the pending edits for a retry.
+                    showStatusMessage('status-message', 'Could not save your profile, your changes are kept - please try again', 'error');
+                })
+                .finally(() => {
+                    profileSaveInFlight = false;
+                    updateProfileBtn.disabled = false;
                 });
         });
+    }
+
+    function handleProfileUpdateResponse(data, edits) {
+        if (data.success) {
+            showStatusMessage('status-message', 'Profile updated successfully', 'success');
+            const results = mediaState.commit(edits, data.media_links);
+            reconcileSavedMediaLinks(results);
+        } else if (data.error === 'username_taken') {
+            showStatusMessage('status-message', 'That username is already taken, please choose another', 'error');
+        } else if (data.errors) {
+            const details = Object.entries(data.errors)
+                .map(([field, messages]) => `${field}: ${messages.join(' ')}`)
+                .join('; ');
+            showStatusMessage('status-message', `Please fix: ${details}`, 'error');
+        } else {
+            showStatusMessage('status-message', 'Something went wrong, try again', 'error');
+        }
     }
 
     // Profile Picture Preview Loader
@@ -116,8 +146,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-            pendingMediaLinks.push(mediaUrl);
-            addMediaLinkToList(mediaUrl, 'pending-' + pendingMediaLinks.length);
+            const pendingId = mediaState.addPending(mediaUrl);
+            addMediaLinkToList(mediaUrl, pendingId);
             mediaInput.value = '';
             showStatusMessage('status-message', 'Link added - press Update to save', 'success');
         });
@@ -130,21 +160,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 const mediaId = e.target.dataset.mediaId;
                 const mediaItem = e.target.parentElement;
 
-                if (String(mediaId).startsWith('pending-')){
-                    const pendingIndex = parseInt(mediaId.replace('pending-', '')) - 1;
-                    pendingMediaLinks.splice(pendingIndex, 1);
-                    mediaItem.remove();
-                    showStatusMessage('status-message', 'Link removed', 'success');
-                    return;
-                }
-
-                linksToDelete.push(mediaId);
+                mediaState.remove(mediaId);
                 mediaItem.remove();
-                showStatusMessage('status-message', 'Link removed - press Update to save changes', 'success');
+                if (mediaState.isPending(mediaId)) {
+                    showStatusMessage('status-message', 'Link removed', 'success');
+                } else {
+                    showStatusMessage('status-message', 'Link removed - press Update to save changes', 'success');
+                }
             }
         });
     }
-    
+
     // ==========================================================================
     // --- 3. ACCOUNT DELETION ---
     // ==========================================================================
@@ -381,21 +407,43 @@ document.addEventListener('DOMContentLoaded', function () {
 // --- 6. HELPER FUNCTIONS ---
 // ==========================================================================
 
-function handleProfileUpdateResponse(data) {
-    if (data.success) {
-        showStatusMessage('status-message', 'Profile updated successfully', 'success');
-        pendingMediaLinks = [];
-        linksToDelete = [];
-    } else if (data.error === 'username_taken') {
-        showStatusMessage('status-message', 'That username is already taken, please choose another', 'error');
-    } else if (data.errors) {
-        const details = Object.entries(data.errors)
-            .map(([field, messages]) => `${field}: ${messages.join(' ')}`)
-            .join('; ');
-        showStatusMessage('status-message', `Please fix: ${details}`, 'error');
-    } else {
-        showStatusMessage('status-message', 'Something went wrong, try again', 'error');
+/**
+ * Parses a fetch response as JSON. Rejects when the body is not JSON (HTML error
+ * page, login redirect) so callers treat it as a failure. A JSON body is passed
+ * through even on a non-2xx status, so structured API errors can be shown.
+ */
+function readJsonResponse(response) {
+    const contentType = response.headers && response.headers.get ? (response.headers.get('content-type') || '') : 'application/json';
+    if (response.redirected || !contentType.includes('json')) {
+        return Promise.reject(new Error('Unexpected non-JSON response'));
     }
+    return response.json().then(function (data) {
+        if (!data || typeof data !== 'object') {
+            throw new Error('Unexpected response body');
+        }
+        if (!response.ok && data.success !== false) {
+            data = Object.assign({}, data, { success: false });
+        }
+        return data;
+    });
+}
+
+/**
+ * After a confirmed save, marks each saved link as persisted: swaps its
+ * pending id for the server id and removes the "not saved yet" label.
+ */
+function reconcileSavedMediaLinks(results) {
+    results.forEach(function (result) {
+        const btn = document.querySelector(`.delete-media-btn[data-media-id="${result.pendingId}"]`);
+        if (!btn || !result.saved) {
+            return;
+        }
+        btn.dataset.mediaId = String(result.saved.id);
+        const label = btn.parentElement.querySelector('.pending-label');
+        if (label) {
+            label.remove();
+        }
+    });
 }
 
 function isValidUrl(url){

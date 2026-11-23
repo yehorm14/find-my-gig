@@ -375,6 +375,8 @@ def update_profile(request):
     and media link changes are saved in one transaction. On invalid input nothing
     is changed and the response carries per-field errors:
     {'success': False, 'error': 'invalid' | 'username_taken', 'errors': {field: [messages]}}
+    On success the links created this request are returned, in submitted order, as
+    {'success': True, 'media_links': [{'id': ..., 'url': ...}]}
     """
     if request.method != 'POST':
         return redirect('gigs:my_profile')
@@ -433,9 +435,9 @@ def update_profile(request):
                 # alongside the existing ones.
                 if cleaned['delete_media']:
                     MediaLink.objects.filter(musician=profile, id__in=cleaned['delete_media']).delete()
-                MediaLink.objects.bulk_create(
-                    [MediaLink(musician=profile, url=url) for url in cleaned['media_links']]
-                )
+                # Created one by one so each new link's id can be returned to the page.
+                saved_links = [MediaLink.objects.create(musician=profile, url=url)
+                               for url in cleaned['media_links']]
             else:
                 profile = user.band
                 profile.bio = cleaned['about']
@@ -444,12 +446,13 @@ def update_profile(request):
                 if cleaned['profile_picture']:
                     profile.profile_picture = cleaned['profile_picture']
                 profile.save()
+                saved_links = []
     except IntegrityError:
         # Lost a race for the username between validation and saving.
         return JsonResponse({'success': False, 'error': 'username_taken',
                              'errors': {'username': ['That username is already taken.']}})
 
-    return json_success()
+    return json_success(media_links=[{'id': link.id, 'url': link.url} for link in saved_links])
 
 
 @login_required
