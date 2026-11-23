@@ -198,6 +198,27 @@ class DataDeletionTests(ViewBaseTestCase):
         self.assertEqual(response.json()['success'], True)
         self.assertFalse(Listing.objects.filter(id=self.listing.id).exists())
 
+class DateFilterTests(ViewBaseTestCase):
+    def test_invalid_date_is_ignored(self):
+        for bad in ('abc', '2026-13-45', '2026-02-30'):
+            response = self.client.get(reverse('gigs:gig_listings'), {'date': bad})
+            self.assertEqual(response.status_code, 200, bad)
+            self.assertIn(self.listing, response.context['gigs'])
+            self.assertEqual(response.context['selected_date'], '')
+
+    def test_invalid_date_keeps_other_filters(self):
+        response = self.client.get(reverse('gigs:gig_listings'), {'date': 'abc', 'instrument': 'Drums'})
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(self.listing, response.context['gigs'])
+
+    def test_valid_date_still_filters(self):
+        match = self.client.get(reverse('gigs:gig_listings'), {'date': '2026-04-01'})
+        self.assertIn(self.listing, match.context['gigs'])
+        self.assertEqual(match.context['selected_date'], '2026-04-01')
+        miss = self.client.get(reverse('gigs:gig_listings'), {'date': '2026-04-02'})
+        self.assertNotIn(self.listing, miss.context['gigs'])
+
+
 class BandApplyRestrictionTests(ViewBaseTestCase):
     """Band accounts must not be able to apply to gigs (issue #10)."""
 
