@@ -11,6 +11,9 @@ Run after `python manage.py migrate`:
 Only two seeded accounts can log in: band_user_1 and musician_1, both with the
 password 'Password123!'. All other seeded users get unusable passwords.
 Demo use only.
+
+Set SEED_SKIP_IMAGES=true to skip the picture downloads. The random seed is
+fixed, so the dataset is the same on every run.
 """
 import argparse
 import os
@@ -117,7 +120,10 @@ GIG_DESCRIPTIONS = [
 ]
 
 def download_image(seed_text, size=300):
-    """Downloads a unique random image based on a text seed, utilizing User-Agent to prevent 403s."""
+    """Downloads a unique random image based on a text seed, utilizing User-Agent to prevent 403s.
+    Set SEED_SKIP_IMAGES=true to skip downloads (fast, offline-safe cold starts)."""
+    if os.environ.get('SEED_SKIP_IMAGES', '').strip().lower() in ('1', 'true', 'yes', 'on'):
+        return None
     url = f"https://picsum.photos/seed/{seed_text}/{size}/{size}"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     
@@ -158,6 +164,8 @@ def clear_media():
 # 2. POPULATION SCRIPT
 # ==========================================
 def populate(reset=False):
+    # Fixed seed so every deploy / cold start produces the same demo dataset.
+    random.seed(20260101)
     if User.objects.filter(is_superuser=False).exists() and not reset:
         print("Database already has users; skipping. Use --reset to wipe them and reseed.")
         return

@@ -118,6 +118,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'gigs.demo.ReadOnlyDemoMiddleware',
 ]
 
 ROOT_URLCONF = 'find_my_gig.urls'
@@ -135,6 +136,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'gigs.context_processors.profile_type',
                 'gigs.context_processors.user_profile',
+                'gigs.demo.demo_context',
             ],
         },
     },
@@ -219,3 +221,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Optional. Without these keys geocoding is skipped and maps show a placeholder.
 GOOGLE_MAPS_FRONTEND_KEY = os.environ.get('GOOGLE_MAPS_FRONTEND_KEY') or None
 GOOGLE_MAPS_BACKEND_KEY = os.environ.get('GOOGLE_MAPS_BACKEND_KEY') or None
+
+# Read-only portfolio demo, off by default. When true, every non-GET request is
+# rejected server-side (except demo sign-in and sign-out) and the site shows a
+# sample-data banner. See docs/DEPLOY.md.
+DEMO_MODE = env_bool('DEMO_MODE')
