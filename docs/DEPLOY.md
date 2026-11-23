@@ -31,7 +31,7 @@ python -c "from django.core.management.utils import get_random_secret_key; print
 
 ## Read-only portfolio demo
 
-With `DEMO_MODE=true` (off by default):
+With `DEMO_MODE=true` (off by default; `render.yaml` does not set it, so add it as an environment variable in the Render dashboard to turn the demo on):
 
 - Anyone can browse gigs, musicians and bands without an account. A banner labels everything as generated sample data.
 - "Try as musician" / "Try as band" sign the visitor in as the seeded `musician_1` or `band_user_1` to show both dashboards.
@@ -51,6 +51,6 @@ Set `SECURE_SSL=false` if you are not behind HTTPS.
 
 ## Render
 
-`render.yaml` builds with `pip install`, `collectstatic`, `migrate` and the population script, and starts `gunicorn find_my_gig.wsgi`. Set `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` and the Maps keys in the Render dashboard.
+`render.yaml` builds with `pip install`, `collectstatic`, `migrate` and the population script. On every start it runs `migrate --noinput` and the population script, then `gunicorn find_my_gig.wsgi`. Set `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` and the Maps keys in the Render dashboard. `DEMO_MODE` is not set in `render.yaml`: set `DEMO_MODE=true` in the Render dashboard to turn the read-only demo on (and redeploy), and leave it unset for a normal site.
 
 SQLite and uploaded media live on Render's ephemeral disk, so all data, including the demo data, resets on each deploy and restart. That suits a demo and not real use.
