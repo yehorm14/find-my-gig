@@ -23,7 +23,10 @@ from gigs.models import (
     MediaLink, 
     BandInterest
 )
-from gigs.forms import UserSignUpForm, MusicianProfileForm, BandProfileForm
+from gigs.forms import (
+    UserSignUpForm, MusicianProfileForm, BandProfileForm,
+    AccountEditForm, MusicianEditForm, BandEditForm,
+)
 from gigs.reviews import ReviewForm, gig_review_problem, musician_review_problem
 
 # Set up a logger for tracking issues in production
@@ -353,72 +356,86 @@ def update_profile(request):
     """
     Handles saving profile edits (bio, picture, instruments, etc.) via AJAX.
     Supports both JSON payloads and Multipart form data (for image uploads).
+
+    All input is validated before anything is written, and the account, profile
+    and media link changes are saved in one transaction. On invalid input nothing
+    is changed and the response carries per-field errors:
+    {'success': False, 'error': 'invalid' | 'username_taken', 'errors': {field: [messages]}}
     """
-    if request.method == 'POST':
-        user = request.user
-        
-        # Determine payload type to extract data safely
-        if request.content_type and 'multipart' in request.content_type:
-            data = request.POST
-            picture = request.FILES.get('profile_picture')
-        else:
-            data = json.loads(request.body)
-            picture = None
+    if request.method != 'POST':
+        return redirect('gigs:my_profile')
 
-        username = data.get('username')
-        firstname = data.get('firstname')
-        surname = data.get('surname')
-        bio = data.get('about')
-        age = data.get('age')
-        instruments = data.get('instruments')
-        media_links_json = data.get('media_links')
-        delete_media_json = data.get('delete_media')
+    user = request.user
 
-        # Check for username conflicts
-        if User.objects.exclude(pk=user.pk).filter(username=username).exists():
-            return json_error('username_taken')
-            
-        user.username = username
-        user.first_name = firstname or ''
-        user.last_name = surname or ''
-        user.save()
+    if request.content_type and 'multipart' in request.content_type:
+        data = request.POST
+        files = request.FILES
+    else:
+        data = parse_json_body(request)
+        if data is None:
+            return json_error('invalid_json')
+        files = None
 
-        # Update Musician specific fields
-        if hasattr(user, 'musician'):
-            profile = user.musician
-            profile.bio = bio
-            if age: 
-                profile.age = int(age)
-            profile.instruments = instruments
-            if picture:
-                profile.profile_picture = picture
-            profile.save()
+    is_musician = hasattr(user, 'musician')
+    is_band = hasattr(user, 'band')
+    if not (is_musician or is_band):
+        return json_error('no_profile')
 
-            if media_links_json:
-                new_links = json.loads(media_links_json) if isinstance(media_links_json, str) else media_links_json
-                MediaLink.objects.filter(musician=profile).delete()
-                for url in new_links:
-                    if url.strip():
-                        MediaLink.objects.create(musician=profile, url=url.strip())
+    account_form = AccountEditForm(data, user=user)
+    profile_form_class = MusicianEditForm if is_musician else BandEditForm
+    profile_form = profile_form_class(data, files)
 
-            if delete_media_json:
-                ids_to_delete = json.loads(delete_media_json) if isinstance(delete_media_json, str) else delete_media_json
-                MediaLink.objects.filter(id__in=ids_to_delete).delete()
+    # Validate both so every field error is reported together.
+    account_valid = account_form.is_valid()
+    profile_valid = profile_form.is_valid()
+    if not (account_valid and profile_valid):
+        errors = {}
+        for form in (account_form, profile_form):
+            errors.update({field: [str(e) for e in errs] for field, errs in form.errors.items()})
+        code = 'username_taken' if 'username' in account_form.errors and \
+            account_form.errors.as_data()['username'][0].code == 'username_taken' else 'invalid'
+        return JsonResponse({'success': False, 'error': code, 'errors': errors})
 
-        # Update Band specific fields
-        elif hasattr(user, 'band'):
-            profile = user.band
-            profile.bio = bio
-            band_name = data.get('band_name')
-            if band_name:
-                profile.name = band_name
-            if picture:
-                profile.profile_picture = picture
-            profile.save()
+    account = account_form.cleaned_data
+    cleaned = profile_form.cleaned_data
+    try:
+        with transaction.atomic():
+            user.username = account['username']
+            user.first_name = account['firstname']
+            user.last_name = account['surname']
+            user.save()
 
-        return json_success()
-    
-    return redirect('gigs:my_profile')
+            if is_musician:
+                profile = user.musician
+                profile.bio = cleaned['about']
+                if cleaned['age'] is not None:
+                    profile.age = cleaned['age']
+                profile.instruments = cleaned['instruments']
+                if cleaned['profile_picture']:
+                    profile.profile_picture = cleaned['profile_picture']
+                profile.save()
+
+                # Only this musician's links can be removed; new links are added
+                # alongside the existing ones.
+                if cleaned['delete_media']:
+                    MediaLink.objects.filter(musician=profile, id__in=cleaned['delete_media']).delete()
+                MediaLink.objects.bulk_create(
+                    [MediaLink(musician=profile, url=url) for url in cleaned['media_links']]
+                )
+            else:
+                profile = user.band
+                profile.bio = cleaned['about']
+                if cleaned['band_name']:
+                    profile.name = cleaned['band_name']
+                if cleaned['profile_picture']:
+                    profile.profile_picture = cleaned['profile_picture']
+                profile.save()
+    except IntegrityError:
+        # Lost a race for the username between validation and saving.
+        return JsonResponse({'success': False, 'error': 'username_taken',
+                             'errors': {'username': ['That username is already taken.']}})
+
+    return json_success()
 
 
 @login_required
