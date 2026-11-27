@@ -65,6 +65,12 @@ def fake_geocode_response(lat, lng):
 
 @override_settings(GOOGLE_MAPS_BACKEND_KEY="test-key")
 class GeocodingLifecycle(ViewBaseTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        # The key override is active here, so fixture listings must not hit the network.
+        with mock.patch("gigs.models.requests.get", return_value=fake_geocode_response(55.9, -4.3)):
+            super().setUpTestData()
+
     def new_listing(self, **kwargs):
         defaults = dict(band=self.band, title="x", deadline=date(2030, 1, 1), is_urgent=False,
                         description="d", req_instruments="Guitar", location="Glasgow")
