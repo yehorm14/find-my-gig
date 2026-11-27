@@ -22,6 +22,10 @@
                 <option value="Other"  {% if selected_instrument == 'Other' %}selected{% endif %}>Other</option>
             </select>
             <button type="button" id="filter-btn" class="btn apply-btn rounded-pill px-4 me-2">Filter</button>
+            <div class="form-check form-switch d-flex align-items-center me-3 mb-0">
+                <input class="form-check-input me-2" type="checkbox" id="show-past-toggle" {% if show_past %}checked{% endif %}>
+                <label class="form-check-label text-muted-custom text-nowrap" for="show-past-toggle">Show past gigs</label>
+            </div>
             <a href="{% url 'gigs:gig_listings' %}" class="btn btn-outline-light rounded-pill px-4">Clear</a>
         </div>
     </div>

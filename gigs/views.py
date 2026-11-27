@@ -11,6 +11,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.core.paginator import Paginator
 from django.db.models import Prefetch
+from django.utils import timezone
 from django.contrib.auth import login, logout
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
@@ -70,8 +71,13 @@ def paginate_list(request, queryset):
 def gig_listings(request):
     """
     Handles the main Gig list page with dropdown filtering and sorting.
+    Gigs whose deadline has passed are hidden unless ?show_past=1 is given.
     """
     gigs_queryset = Listing.objects.all()
+
+    show_past = request.GET.get('show_past') == '1'
+    if not show_past:
+        gigs_queryset = gigs_queryset.filter(deadline__gte=timezone.localdate())
 
     # Extract filter and sort parameters from URL
     instrument_filter = request.GET.get('instrument', '')
@@ -117,6 +123,7 @@ def gig_listings(request):
         'selected_instrument': instrument_filter,
         'selected_date': date_query,
         'current_sort': sort_by,
+        'show_past': show_past,
         'bookmarked_gig_ids': bookmarked_gig_ids,
     }
 
@@ -414,13 +421,13 @@ def update_profile(request):
     else:
         data = parse_json_body(request)
         if data is None:
-            return json_error('invalid_json')
+            return json_error('invalid_json', 400)
         files = None
 
     is_musician = hasattr(user, 'musician')
     is_band = hasattr(user, 'band')
     if not (is_musician or is_band):
-        return json_error('no_profile')
+        return json_error('no_profile', 403)
 
     account_form = AccountEditForm(data, user=user)
     profile_form_class = MusicianEditForm if is_musician else BandEditForm
@@ -435,7 +442,7 @@ def update_profile(request):
             errors.update({field: [str(e) for e in errs] for field, errs in form.errors.items()})
         code = 'username_taken' if 'username' in account_form.errors and \
             account_form.errors.as_data()['username'][0].code == 'username_taken' else 'invalid'
-        return JsonResponse({'success': False, 'error': code, 'errors': errors})
+        return JsonResponse({'success': False, 'error': code, 'errors': errors}, status=400)
 
     account = account_form.cleaned_data
     cleaned = profile_form.cleaned_data
@@ -474,7 +481,8 @@ def update_profile(request):
     except IntegrityError:
         # Lost a race for the username between validation and saving.
         return JsonResponse({'success': False, 'error': 'username_taken',
-                             'errors': {'username': ['That username is already taken.']}})
+                             'errors': {'username': ['That username is already taken.']}},
+                            status=400)
 
     return json_success()
 
@@ -487,7 +495,7 @@ def delete_account(request):
         logout(request)
         user.delete()
         return json_success()
-    return json_error('Invalid request method')
+    return json_error('Invalid request method', 405)
 
 
 # ==============================================================================
@@ -501,11 +509,11 @@ def create_gig_listing(request):
     """
     if request.method == 'POST':
         if not hasattr(request.user, 'band'):
-            return json_error('not_a_band')
+            return json_error('not_a_band', 403)
 
         data = parse_json_body(request)
         if data is None:
-            return json_error('invalid_json')
+            return json_error('invalid_json', 400)
         title = str(data.get('title', '')).strip()
         req_instruments = str(data.get('req_instruments', '')).strip()
         deadline = data.get('date', '')
@@ -513,9 +521,11 @@ def create_gig_listing(request):
         location = str(data.get('location', '')).strip()
 
         if not all([title, req_instruments, deadline, description, location]):
-            return json_error('missing_fields')
+            return json_error('missing_fields', 400)
 
         try:
+            if datetime.date.fromisoformat(str(deadline)) < timezone.localdate():
+                return json_error('invalid_data')
             listing = Listing.objects.create(
                 band=request.user.band,
                 title=title,
@@ -526,7 +536,7 @@ def create_gig_listing(request):
                 is_urgent=False
             )
         except (ValidationError, ValueError):
-            return json_error('invalid_data')
+            return json_error('invalid_data', 400)
 
         return JsonResponse({
             'success': True,
@@ -540,7 +550,7 @@ def create_gig_listing(request):
             }
         })
         
-    return json_error('Invalid request method')
+    return json_error('Invalid request method', 405)
 
     
 @login_required
@@ -548,19 +558,23 @@ def delete_listing(request, listing_id):
     """Allows a Band to delete their own listing."""
     if request.method == 'POST':
         if not hasattr(request.user, 'band'):
-            return json_error('not_a_band')
+            return json_error('not_a_band', 403)
         try:
             listing = Listing.objects.get(id=listing_id, band=request.user.band)
             listing.delete()
             return json_success()
         except Listing.DoesNotExist:
-            return json_error('not_found')
-    return json_error('invalid_request')
+            return json_error('not_found', 404)
+    return json_error('invalid_request', 405)
 
 
-def json_error(error):
-    """Standard failure payload for the AJAX endpoints."""
-    return JsonResponse({'success': False, 'error': error})
+def json_error(error, status=400):
+    """
+    Standard failure payload for the AJAX endpoints. The HTTP status says what
+    kind of failure it was: 400 bad input, 403 not allowed (wrong role or not
+    logged in), 404 not found, 405 wrong method.
+    """
+    return JsonResponse({'success': False, 'error': error}, status=status)
 
 
 def json_success(**extra):
@@ -586,10 +600,13 @@ def listing_action(view_func):
     @functools.wraps(view_func)
     def wrapper(request, gig_id):
         if request.method != 'POST':
-            return json_error('Invalid request')
+            return json_error('Invalid request', 405)
         if not request.user.is_authenticated:
-            return json_error('not_logged_in')
-        listing = get_object_or_404(Listing, id=gig_id)
+            return json_error('not_logged_in', 403)
+        try:
+            listing = Listing.objects.get(id=gig_id)
+        except Listing.DoesNotExist:
+            return json_error('not_found', 404)
         return view_func(request, listing)
     return wrapper
 
@@ -598,18 +615,20 @@ def listing_action(view_func):
 def apply_gig(request, listing):
     """Creates an Application linking a Musician to a Gig. Bands cannot apply."""
     if not hasattr(request.user, 'musician'):
-        return json_error('not_a_musician')
+        return json_error('not_a_musician', 403)
     if listing.band.user == request.user:
-        return json_error('own_gig')
+        return json_error('own_gig', 403)
     if Application.objects.filter(applicant=request.user, listing=listing).exists():
-        return json_error('already_applied')
+        return json_error('already_applied', 400)
+    if listing.deadline < timezone.localdate():
+        return json_error('deadline_passed', 400)
 
     try:
         with transaction.atomic():
             Application.objects.create(applicant=request.user, listing=listing)
     except IntegrityError:
         # Lost a race with a concurrent identical request.
-        return json_error('already_applied')
+        return json_error('already_applied', 400)
     return json_success()
 
 
@@ -620,15 +639,15 @@ def _set_application_status(request, application_id, status):
     as for a missing application, and nothing is changed.
     """
     if request.method != 'POST':
-        return json_error('invalid_request')
+        return json_error('invalid_request', 405)
     if not request.user.is_authenticated:
-        return json_error('not_logged_in')
+        return json_error('not_logged_in', 403)
     if not hasattr(request.user, 'band'):
-        return json_error('not_a_band')
+        return json_error('not_a_band', 403)
     try:
         application = Application.objects.get(id=application_id, listing__band=request.user.band)
     except Application.DoesNotExist:
-        return json_error('not_found')
+        return json_error('not_found', 404)
     application.status = status
     application.save(update_fields=['status'])
     return json_success(status=application.status)
@@ -745,25 +764,28 @@ def send_interest(request, musician_id):
     """Allows a Band to send a simple interest message to a Musician via AJAX."""
     if request.method == 'POST':
         if not hasattr(request.user, 'band'):
-            return json_error('Only bands can send interest.')
+            return json_error('Only bands can send interest.', 403)
 
         band = request.user.band
-        musician = get_object_or_404(Musician, id=musician_id)
+        try:
+            musician = Musician.objects.get(id=musician_id)
+        except Musician.DoesNotExist:
+            return json_error('not_found', 404)
         data = parse_json_body(request)
         if data is None:
-            return json_error('invalid_json')
+            return json_error('invalid_json', 400)
         message = str(data.get('message', '')).strip()
 
         if not message:
-            return json_error('Message cannot be empty.')
+            return json_error('Message cannot be empty.', 400)
 
         if BandInterest.objects.filter(band=band, musician=musician).exists():
-            return json_error('You have already reached out to this musician.')
+            return json_error('You have already reached out to this musician.', 400)
 
         BandInterest.objects.create(band=band, musician=musician, message=message)
         return json_success()
         
-    return json_error('Invalid request method')
+    return json_error('Invalid request method', 405)
     
 
 @login_required
@@ -786,6 +808,6 @@ def delete_interest(request, interest_id):
             interest.delete()
             return json_success()
         except (Musician.DoesNotExist, BandInterest.DoesNotExist):
-            return json_error('Not found.')
+            return json_error('not_found', 404)
             
-    return json_error('Invalid request method')
+    return json_error('Invalid request method', 405)

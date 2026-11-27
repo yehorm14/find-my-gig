@@ -37,7 +37,7 @@
                 </div>
 
                 <div class="col-md-4 mb-4 mb-md-0">
-                    {% if google_maps_frontend_key and application.listing.latitude and application.listing.longitude %}
+                    {% if google_maps_frontend_key and application.listing.latitude is not None and application.listing.longitude is not None %}
                         <div class="gig-mini-map rounded" 
                              id="map-{{ application.listing.id }}"
                              data-lat="{{ application.listing.latitude|safe }}" 

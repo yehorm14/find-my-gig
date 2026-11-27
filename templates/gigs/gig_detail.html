@@ -110,7 +110,7 @@
         </div>
 
         <div class="col-lg-6 mb-4">
-            {% if google_maps_frontend_key and listing.latitude and listing.longitude %}
+            {% if google_maps_frontend_key and listing.latitude is not None and listing.longitude is not None %}
                 <div class="gig-mini-map" 
                      id="map-{{ listing.id }}"
                      data-lat="{{ listing.latitude|safe }}" 
