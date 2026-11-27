@@ -148,6 +148,9 @@ WSGI_APPLICATION = 'find_my_gig.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# Keeps the test suite offline: blocks outbound network and real API keys.
+TEST_RUNNER = 'find_my_gig.test_runner.OfflineDiscoverRunner'
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',

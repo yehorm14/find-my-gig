@@ -1,6 +1,5 @@
 document.addEventListener('DOMContentLoaded', function () {
 
-    const mediaState = createMediaState();
     let profileSaveInFlight = false;
 
     // ==========================================================================
@@ -8,6 +7,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // ==========================================================================
     
     const updateProfileBtn = document.getElementById('update-profile-btn');
+    const mediaState = updateProfileBtn ? createMediaState() : null;
 
     if (updateProfileBtn){
         updateProfileBtn.addEventListener('click', function(){
@@ -78,8 +78,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 .then(readJsonResponse)
                 .then(data => handleProfileUpdateResponse(data, edits))
                 .catch(() => {
-                    // Offline, HTML error page or expired session: nothing was
-                    // saved, so keep the pending edits for a retry.
+                    // Keep pending edits when the server has not confirmed a save.
                     showStatusMessage('status-message', 'Could not save your profile, your changes are kept - please try again', 'error');
                 })
                 .finally(() => {
@@ -91,9 +90,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function handleProfileUpdateResponse(data, edits) {
         if (data.success) {
-            showStatusMessage('status-message', 'Profile updated successfully', 'success');
             const results = mediaState.commit(edits, data.media_links);
             reconcileSavedMediaLinks(results);
+            const status = mediaState.hasChanges()
+                ? 'Profile updated. Press Update to save your remaining link changes.'
+                : 'Profile updated successfully';
+            showStatusMessage('status-message', status, 'success');
         } else if (data.error === 'username_taken') {
             showStatusMessage('status-message', 'That username is already taken, please choose another', 'error');
         } else if (data.errors) {
@@ -189,7 +191,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         'Content-Type': 'application/json'
                     }
                 })
-                .then(response => response.json())
+                .then(response => readJson(response))
                 .then(data => {
                     if (data.success) {
                         window.location.href = '/';
@@ -219,11 +221,13 @@ document.addEventListener('DOMContentLoaded', function () {
                         'Content-Type': 'application/json'
                     }
                 })
-                .then(response => response.json())
+                .then(response => readJson(response))
                 .then(data => {
                     if (data.success) {
                         applicationCard.remove();
                         showStatusMessage('status-message', 'Application withdrawn', 'success');
+                    } else {
+                        showStatusMessage('status-message', data.error || data.message || 'Could not withdraw application', 'error');
                     }
                 })
                 .catch(() => {
@@ -247,7 +251,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         'Content-Type': 'application/json'
                     }
                 })
-                .then(response => response.json())
+                .then(response => readJson(response))
                 .then(data => {
                     if (data.success) {
                         const label = APPLICATION_STATUS_LABELS[action];
@@ -297,7 +301,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 },
                 body: JSON.stringify(gigData)
             })
-            .then(response => response.json())
+            .then(response => readJson(response))
             .then(data => {
                 if (data.success) {
                     showStatusMessage('status-message', 'Gig listing created successfully', 'success');
@@ -327,7 +331,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             'Content-Type': 'application/json'
                         }
                     })
-                    .then(response => response.json())
+                    .then(response => readJson(response))
                     .then(data => {
                         if (data.success) {
                             listingCard.remove();
@@ -358,7 +362,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     'Content-Type': 'application/json'
                 }
             })
-            .then(response => response.json())
+            .then(response => readJson(response))
             .then(data => {
                 if (data.success) {
                     savedGigCard?.remove();
@@ -390,7 +394,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         'Content-Type': 'application/json' 
                     }
                 })
-                .then(res => res.json())
+                .then(res => readJson(res))
                 .then(data => {
                     if (data.success) {
                         msgCard.remove();

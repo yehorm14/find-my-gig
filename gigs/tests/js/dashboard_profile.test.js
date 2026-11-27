@@ -117,6 +117,40 @@ test('ui: saving twice does not resend a saved link', async () => {
     assert.strictEqual(ui.buttons()[0].dataset.mediaId, '42');
 });
 
+test('ui: deleting a submitted link during a save queues deletion of its persisted id', async () => {
+    const bodies = [];
+    let finishSave;
+    const firstSave = new Promise(resolve => { finishSave = resolve; });
+    const ui = setup((url, cfg) => {
+        bodies.push(JSON.parse(cfg.body));
+        return bodies.length === 1
+            ? firstSave
+            : res({ success: true, media_links: [] });
+    });
+    ui.add('https://a.com');
+    const saving = ui.save();
+    ui.del(0);
+    finishSave(res({ success: true, media_links: [{ id: 42, url: 'https://a.com' }] }));
+    await saving;
+    assert.strictEqual(ui.buttons().length, 0);
+    assert.match(ui.status(), /remaining link changes/);
+    await ui.save();
+    assert.deepStrictEqual(bodies[1].delete_media, ['42']);
+});
+
+test('ui: pages without the profile script still wire dashboard handlers', () => {
+    let initialize;
+    const withdrawApplication = new El('button');
+    const document = {
+        addEventListener: (type, callback) => { initialize = callback; },
+        getElementById: () => null,
+        querySelectorAll: selector => selector === '.withdraw-application-btn' ? [withdrawApplication] : []
+    };
+    vm.runInNewContext(fs.readFileSync(path.join(jsDir, 'dashboard.js'), 'utf8'), { document });
+    initialize();
+    assert.strictEqual(withdrawApplication.listeners.click?.length, 1);
+});
+
 test('ui: saved link can then be deleted by its persisted id', async () => {
     const bodies = [];
     const ui = setup((url, cfg) => { bodies.push(JSON.parse(cfg.body)); return res({ success: true, media_links: [{ id: 42, url: 'https://a.com' }] }); });

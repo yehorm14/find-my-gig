@@ -49,13 +49,20 @@
             // anything queued while the request was in flight. Returns the pairing
             // of each pending id with the persisted link the server created.
             commit(snapshot, savedLinks) {
-                const sentIds = snapshot.links.map(function (item) { return item.id; });
-                pending = pending.filter(function (item) { return !sentIds.includes(item.id); });
                 toDelete = toDelete.filter(function (id) { return !snapshot.deletes.includes(id); });
 
+                const sentIds = snapshot.links.map(function (item) { return item.id; });
+                const pendingIds = new Set(pending.map(function (item) { return item.id; }));
+                pending = pending.filter(function (item) { return !sentIds.includes(item.id); });
+
                 const saved = Array.isArray(savedLinks) ? savedLinks : [];
-                return snapshot.links.map(function (item, index) {
-                    return { pendingId: item.id, saved: saved[index] || null };
+                return snapshot.links.map((item, index) => {
+                    const persistedLink = saved[index] || null;
+                    if (persistedLink && !pendingIds.has(item.id)) {
+                        // The link was deleted locally after it was submitted.
+                        this.remove(persistedLink.id);
+                    }
+                    return { pendingId: item.id, saved: persistedLink };
                 });
             }
         };
