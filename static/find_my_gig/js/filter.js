@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (showPastToggle) {
         showPastToggle.addEventListener('change', function () {
             const params = new URLSearchParams(window.location.search);
+            params.delete('page');
             if (this.checked) {
                 params.set('show_past', '1');
             } else {
