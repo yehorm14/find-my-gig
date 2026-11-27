@@ -99,24 +99,28 @@ MUSICIAN_BIOS = [
     "Rhythm is my life. I play strictly to a click track and lock in perfectly with the bass. I have a full DW kit and my own transportation. Looking for an established gigging band."
 ]
 
-GIG_TITLES = [
-    "Looking for a shredder!", "Emergency fill-in needed", "Wedding band needs vocals",
-    "Studio bassist wanted", "Drummer for Europe tour", "Acoustic guitarist for cafe",
-    "Pianist for corporate event", "Seeking harsh vocalist", "Need a reliable bassist",
-    "Synth player wanted for 80s cover band"
-]
-
-GIG_DESCRIPTIONS = [
-    "URGENT: Our lead player broke their wrist and we have a headline show next Saturday. We play a mix of modern indie and classic rock. Paid gig (£150). Must learn 10 songs by Thursday.",
-    "We are a working wedding band looking to replace a departing member. You must have pro gear, formal stage wear, and reliable transport. We gig 40+ weekends a year. Serious inquiries only.",
-    "Looking for someone to complete our lineup for a 2-week UK tour supporting a major national act. All travel and accommodation paid for, plus a nightly per diem. Must have a valid passport.",
-    "Starting a brand new original project in the vein of Paramore and Fall Out Boy. We have a rehearsal space locked down and 5 demos fully written. Just need the right person to bring them to life.",
-    "Need a session player for a 2-day studio booking next month. We will send you the scratch tracks and sheet music in advance. Standard MU rates apply. Send links to previous studio work.",
-    "Laid back acoustic duo looking to become a trio. We play quiet corner pubs on Sunday afternoons. The money isn't great but the beer is free and the vibes are excellent.",
-    "Looking for a hired gun for a corporate function. It's a 3-hour set of standard Top 40 covers. £200 for the night. You must be able to dress sharply and act professionally.",
-    "We are going into the studio next week and our current member just bailed. We need someone who can learn fast, write their own parts on the fly, and handle the pressure of tracking to a click.",
-    "Looking for a permanent addition to our metal project. Must be capable of playing at 200 BPM and have stage presence. We practice every Tuesday and Thursday without fail.",
-    "Experimental jazz/funk fusion band looking for a missing piece. You must be comfortable with odd time signatures, extended improvisation, and reading complex charts."
+# Each post keeps title, instrument and description consistent with each other.
+GIG_POSTS = [
+    {"title": "Lead guitarist for headline show", "instrument": "Guitar",
+     "description": "Our lead player is recovering from a wrist injury and we need cover for a headline show. We play modern indie and classic rock. Paid gig (£150). The set includes 10 songs."},
+    {"title": "Wedding band needs a vocalist", "instrument": "Vocals",
+     "description": "We are a working wedding band looking to replace a departing singer. You must have pro gear, formal stage wear, and reliable transport. We gig 40+ weekends a year. Serious inquiries only."},
+    {"title": "Drummer for 2-week UK tour", "instrument": "Drums",
+     "description": "Looking for someone to complete our lineup for a 2-week UK tour supporting a major national act. All travel and accommodation paid for, plus a nightly per diem. Must have a valid passport."},
+    {"title": "Bassist for new pop-punk project", "instrument": "Bass",
+     "description": "Starting a brand new original project in the vein of Paramore and Fall Out Boy. We have a rehearsal space locked down and 5 demos fully written. Just need the right bassist to bring them to life."},
+    {"title": "Session keys player for studio booking", "instrument": "Keys/Synth",
+     "description": "Need a session keys player for a two-day studio booking. We will send you the scratch tracks and sheet music in advance. Standard MU rates apply. Send links to previous studio work."},
+    {"title": "Acoustic guitarist for pub trio", "instrument": "Guitar",
+     "description": "Laid back acoustic duo looking to become a trio. We play quiet corner pubs on Sunday afternoons. The money isn't great but the beer is free and the vibes are excellent."},
+    {"title": "Bassist for corporate function", "instrument": "Bass",
+     "description": "Looking for a hired gun bassist for a corporate function. It's a 3-hour set of standard Top 40 covers. £200 for the night. You must be able to dress sharply and act professionally."},
+    {"title": "Studio drummer for upcoming recording", "instrument": "Drums",
+     "description": "We have an upcoming studio session and our current drummer is unavailable. We need someone who can learn fast, write their own parts on the fly, and handle the pressure of tracking to a click."},
+    {"title": "Harsh vocalist for metal project", "instrument": "Vocals",
+     "description": "Looking for a permanent harsh vocalist for our metal project. Must have a sustainable technique and real stage presence. We practice every Tuesday and Thursday without fail."},
+    {"title": "Synth player for jazz/funk fusion band", "instrument": "Keys/Synth",
+     "description": "Experimental jazz/funk fusion band looking for a synth player. You must be comfortable with odd time signatures, extended improvisation, and reading complex charts."},
 ]
 
 def download_image(seed_text, size=300):
@@ -250,13 +254,14 @@ def populate(reset=False):
         owning_band = random.choice(bands_list)
         future_date = timezone.localdate() + timedelta(days=random.randint(1, 60))
         venue = random.choice(UK_VENUES)
+        post = random.choice(GIG_POSTS)
         
         listing = Listing.objects.create(
             band=owning_band,
-            title=random.choice(GIG_TITLES),
-            req_instruments=random.choice(INSTRUMENTS),
+            title=post['title'],
+            req_instruments=post['instrument'],
             deadline=future_date,
-            description=random.choice(GIG_DESCRIPTIONS),
+            description=post['description'],
             location=f"{venue['name']}, {venue['city']}",
             is_urgent=random.choice([True, False, False]),
             latitude=venue['lat'],
