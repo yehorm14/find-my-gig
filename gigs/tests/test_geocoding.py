@@ -51,3 +51,38 @@ class GeocodingTest(TestCase):
             listing.save()
         self.assertIsNotNone(listing.pk)
         self.assertIsNone(listing.latitude)
+
+    @override_settings(GOOGLE_MAPS_BACKEND_KEY="test-key")
+    def test_provider_error_status_does_not_block_save(self):
+        listing = make_listing()
+        fake = mock.Mock()
+        fake.json.return_value = {"status": "REQUEST_DENIED", "error_message": "The provided API key is invalid."}
+        with mock.patch("gigs.models.requests.get", return_value=fake):
+            with self.assertLogs("gigs.models", level="ERROR") as logs:
+                listing.save()
+        self.assertIn("REQUEST_DENIED", logs.output[0])
+        self.assertIsNotNone(listing.pk)
+        self.assertIsNone(listing.latitude)
+        self.assertIsNone(listing.longitude)
+
+    @override_settings(GOOGLE_MAPS_BACKEND_KEY="test-key")
+    def test_non_json_provider_response_does_not_block_save(self):
+        listing = make_listing()
+        fake = mock.Mock()
+        fake.json.side_effect = ValueError("not json")
+        with mock.patch("gigs.models.requests.get", return_value=fake):
+            listing.save()
+        self.assertIsNotNone(listing.pk)
+        self.assertIsNone(listing.latitude)
+
+    @override_settings(GOOGLE_MAPS_BACKEND_KEY="test-key")
+    def test_unmocked_network_attempt_fails_the_test(self):
+        """The offline runner must turn a real request into an error, not a silent fallback."""
+        import requests
+        from find_my_gig.test_runner import NetworkBlockedError
+        with self.assertRaises(NetworkBlockedError):
+            requests.get("https://maps.googleapis.com/maps/api/geocode/json", timeout=1)
+
+    def test_environment_key_is_ignored_under_test(self):
+        from django.conf import settings
+        self.assertIsNone(settings.GOOGLE_MAPS_BACKEND_KEY)

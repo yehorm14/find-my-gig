@@ -102,7 +102,7 @@ MUSICIAN_BIOS = [
 # Each post keeps title, instrument and description consistent with each other.
 GIG_POSTS = [
     {"title": "Lead guitarist for headline show", "instrument": "Guitar",
-     "description": "URGENT: Our lead player broke their wrist and we have a headline show next Saturday. We play a mix of modern indie and classic rock. Paid gig (£150). Must learn 10 songs by Thursday."},
+     "description": "Our lead player is recovering from a wrist injury and we need cover for a headline show. We play modern indie and classic rock. Paid gig (£150). The set includes 10 songs."},
     {"title": "Wedding band needs a vocalist", "instrument": "Vocals",
      "description": "We are a working wedding band looking to replace a departing singer. You must have pro gear, formal stage wear, and reliable transport. We gig 40+ weekends a year. Serious inquiries only."},
     {"title": "Drummer for 2-week UK tour", "instrument": "Drums",
@@ -110,13 +110,13 @@ GIG_POSTS = [
     {"title": "Bassist for new pop-punk project", "instrument": "Bass",
      "description": "Starting a brand new original project in the vein of Paramore and Fall Out Boy. We have a rehearsal space locked down and 5 demos fully written. Just need the right bassist to bring them to life."},
     {"title": "Session keys player for studio booking", "instrument": "Keys/Synth",
-     "description": "Need a session keys player for a 2-day studio booking next month. We will send you the scratch tracks and sheet music in advance. Standard MU rates apply. Send links to previous studio work."},
+     "description": "Need a session keys player for a two-day studio booking. We will send you the scratch tracks and sheet music in advance. Standard MU rates apply. Send links to previous studio work."},
     {"title": "Acoustic guitarist for pub trio", "instrument": "Guitar",
      "description": "Laid back acoustic duo looking to become a trio. We play quiet corner pubs on Sunday afternoons. The money isn't great but the beer is free and the vibes are excellent."},
     {"title": "Bassist for corporate function", "instrument": "Bass",
      "description": "Looking for a hired gun bassist for a corporate function. It's a 3-hour set of standard Top 40 covers. £200 for the night. You must be able to dress sharply and act professionally."},
-    {"title": "Studio drummer, tracking next week", "instrument": "Drums",
-     "description": "We are going into the studio next week and our current drummer just bailed. We need someone who can learn fast, write their own parts on the fly, and handle the pressure of tracking to a click."},
+    {"title": "Studio drummer for upcoming recording", "instrument": "Drums",
+     "description": "We have an upcoming studio session and our current drummer is unavailable. We need someone who can learn fast, write their own parts on the fly, and handle the pressure of tracking to a click."},
     {"title": "Harsh vocalist for metal project", "instrument": "Vocals",
      "description": "Looking for a permanent harsh vocalist for our metal project. Must have a sustainable technique and real stage presence. We practice every Tuesday and Thursday without fail."},
     {"title": "Synth player for jazz/funk fusion band", "instrument": "Keys/Synth",
@@ -252,7 +252,7 @@ def populate(reset=False):
     print("Creating 30 Gig Listings...")
     for i in range(30):
         owning_band = random.choice(bands_list)
-        future_date = timezone.now() + timedelta(days=random.randint(1, 60))
+        future_date = timezone.localdate() + timedelta(days=random.randint(1, 60))
         venue = random.choice(UK_VENUES)
         post = random.choice(GIG_POSTS)
         

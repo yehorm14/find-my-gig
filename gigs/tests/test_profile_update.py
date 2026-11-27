@@ -127,8 +127,10 @@ class ProfileUpdateTests(ViewBaseTestCase):
     def test_duplicate_username_returns_field_error_and_changes_nothing(self):
         self.client.login(username="musicianuser", password="pass123")
         before = self.snapshot()
-        body = self.post_json(self.musician_payload(username='banduser', about='Changed',
-                                                    media_links=['https://example.com/new'])).json()
+        response = self.post_json(self.musician_payload(username='banduser', about='Changed',
+                                                        media_links=['https://example.com/new']))
+        self.assertEqual(response.status_code, 400)
+        body = response.json()
         self.assertEqual(body['success'], False)
         self.assertEqual(body['error'], 'username_taken')
         self.assertIn('username', body['errors'])
@@ -155,7 +157,9 @@ class ProfileUpdateTests(ViewBaseTestCase):
 
     def test_missing_required_fields_report_each_field(self):
         self.client.login(username="musicianuser", password="pass123")
-        body = self.post_json({'username': '', 'about': '', 'instruments': ''}).json()
+        response = self.post_json({'username': '', 'about': '', 'instruments': ''})
+        self.assertEqual(response.status_code, 400)
+        body = response.json()
         self.assertFalse(body['success'])
         self.assertTrue({'username', 'about', 'instruments'} <= set(body['errors']))
 
@@ -172,13 +176,15 @@ class ProfileUpdateTests(ViewBaseTestCase):
     def test_malformed_json_body(self):
         self.client.login(username="musicianuser", password="pass123")
         response = self.client.post(self.url, data="{nope", content_type="application/json")
+        self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {'success': False, 'error': 'invalid_json'})
 
     def test_user_without_profile_is_rejected_without_changes(self):
         plain = User.objects.create_user(username="plain", password="pass123")
         self.client.login(username="plain", password="pass123")
-        body = self.post_json(self.musician_payload(username='plain2')).json()
-        self.assertEqual(body['error'], 'no_profile')
+        response = self.post_json(self.musician_payload(username='plain2'))
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()['error'], 'no_profile')
         plain.refresh_from_db()
         self.assertEqual(plain.username, 'plain')
 

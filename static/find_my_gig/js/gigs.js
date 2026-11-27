@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     method: 'POST',
                     headers: { 'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json' }
                 })
-                .then(res => res.json())
+                .then(res => readJson(res))
                 .then(data => {
                     if (data.success) {
                         applyBtn.textContent = isApplying ? 'Withdraw' : 'Apply';
@@ -68,7 +68,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     method: 'POST',
                     headers: { 'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json' }
                 })
-                .then(res => res.json())
+                .then(res => readJson(res))
                 .then(data => {
                     if (data.success) {
                         bookmarkBtn.textContent = isSaving ? '★ Bookmarked' : '☆ Bookmark';
@@ -105,7 +105,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 method: 'POST',
                 headers: { 'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json' }
             })
-            .then(res => res.json())
+            .then(res => readJson(res))
             .then(data => {
                 if (data.success) {
                     btn.dataset.applied = isApplied ? 'false' : 'true';
@@ -145,7 +145,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 method: 'POST',
                 headers: { 'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json' }
             })
-            .then(res => res.json())
+            .then(res => readJson(res))
             .then(data => {
                 if (data.success) {
                     btn.dataset.bookmarked = isBookmarked ? 'false' : 'true';
@@ -178,7 +178,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 headers: { 'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: message })
             })
-            .then(res => res.json())
+            .then(res => readJson(res))
             .then(data => {
                 if (data.success) {
                     const modalElement = document.getElementById('interestModal');

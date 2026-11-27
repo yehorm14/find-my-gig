@@ -15,14 +15,14 @@ class MalformedAndWrongRoleRequests(ViewBaseTestCase):
     def test_delete_listing_by_musician_returns_json_error(self):
         self.client.login(username="musicianuser", password="pass123")
         response = self.client.post(reverse('gigs:delete_listing', args=[self.listing.id]))
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 403)
         self.assertFalse(response.json()['success'])
         self.assertTrue(Listing.objects.filter(id=self.listing.id).exists())
 
     def test_create_gig_listing_malformed_json(self):
         self.client.login(username="banduser", password="pass123")
         response = self.client.post(reverse('gigs:create_gig_listing'), data="{not json", content_type="application/json")
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {'success': False, 'error': 'invalid_json'})
 
     def test_create_gig_listing_bad_date(self):
@@ -31,13 +31,14 @@ class MalformedAndWrongRoleRequests(ViewBaseTestCase):
                    'description': 'd', 'location': 'Glasgow'}
         response = self.client.post(reverse('gigs:create_gig_listing'), data=json.dumps(payload),
                                     content_type="application/json")
+        self.assertEqual(response.status_code, 400)
         self.assertFalse(response.json()['success'])
 
     def test_send_interest_malformed_json(self):
         self.client.login(username="banduser", password="pass123")
         response = self.client.post(reverse('gigs:send_interest', args=[self.musician.id]),
                                     data="][", content_type="application/json")
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {'success': False, 'error': 'invalid_json'})
 
 
@@ -52,6 +53,7 @@ class ApplicationUniqueness(ViewBaseTestCase):
         self.client.login(username="musicianuser", password="pass123")
         with mock.patch("gigs.views.Application.objects.create", side_effect=IntegrityError):
             response = self.client.post(reverse('gigs:apply_gig', args=[self.listing.id]))
+        self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {'success': False, 'error': 'already_applied'})
 
 
@@ -63,6 +65,12 @@ def fake_geocode_response(lat, lng):
 
 @override_settings(GOOGLE_MAPS_BACKEND_KEY="test-key")
 class GeocodingLifecycle(ViewBaseTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        # The key override is active here, so fixture listings must not hit the network.
+        with mock.patch("gigs.models.requests.get", return_value=fake_geocode_response(55.9, -4.3)):
+            super().setUpTestData()
+
     def new_listing(self, **kwargs):
         defaults = dict(band=self.band, title="x", deadline=date(2030, 1, 1), is_urgent=False,
                         description="d", req_instruments="Guitar", location="Glasgow")
@@ -144,8 +152,82 @@ class PopulationScriptGuard(TestCase):
             self.assertTrue(Application.objects.filter(
                 applicant=applicant, listing=review.listing, status=Application.ACCEPTED).exists(), review)
 
+    def test_seeded_gigs_are_all_upcoming(self):
+        """Seed deadlines are relative to today, so the default listing is never empty."""
+        from django.utils import timezone
+        self.run_populate()
+        self.assertEqual(Listing.objects.count(), 30)
+        self.assertFalse(Listing.objects.filter(deadline__lt=timezone.localdate()).exists())
+
     def test_only_demo_accounts_have_usable_passwords(self):
         self.run_populate()
         usable = set(User.objects.filter(is_superuser=False).exclude(password__startswith="!")
                      .values_list("username", flat=True))
         self.assertEqual(usable, {"band_user_1", "musician_1"})
+
+
+class AjaxErrorStatusCodes(ViewBaseTestCase):
+    """Every AJAX failure carries a meaningful HTTP status along with the JSON payload."""
+
+    def assertJsonError(self, response, status, error=None):
+        self.assertEqual(response.status_code, status)
+        body = response.json()
+        self.assertFalse(body['success'])
+        if error is not None:
+            self.assertEqual(body['error'], error)
+
+    def test_create_listing_by_musician_is_403(self):
+        self.client.login(username="musicianuser", password="pass123")
+        response = self.client.post(reverse('gigs:create_gig_listing'), data='{}', content_type="application/json")
+        self.assertJsonError(response, 403, 'not_a_band')
+
+    def test_create_listing_missing_fields_is_400(self):
+        self.client.login(username="banduser", password="pass123")
+        response = self.client.post(reverse('gigs:create_gig_listing'), data='{"title": "x"}',
+                                    content_type="application/json")
+        self.assertJsonError(response, 400, 'missing_fields')
+
+    def test_create_listing_get_is_405(self):
+        self.client.login(username="banduser", password="pass123")
+        self.assertJsonError(self.client.get(reverse('gigs:create_gig_listing')), 405)
+
+    def test_delete_missing_listing_is_404(self):
+        self.client.login(username="banduser", password="pass123")
+        self.assertJsonError(self.client.post(reverse('gigs:delete_listing', args=[999999])), 404, 'not_found')
+
+    def test_delete_listing_get_is_405(self):
+        self.client.login(username="banduser", password="pass123")
+        self.assertJsonError(self.client.get(reverse('gigs:delete_listing', args=[self.listing.id])), 405)
+
+    def test_gig_actions_on_missing_gig_are_404(self):
+        self.client.login(username="musicianuser", password="pass123")
+        for name in ('apply_gig', 'withdraw_gig', 'save_gig', 'unsave_gig'):
+            response = self.client.post(reverse(f'gigs:{name}', args=[999999]))
+            self.assertJsonError(response, 404, 'not_found')
+
+    def test_send_interest_errors(self):
+        url = reverse('gigs:send_interest', args=[self.musician.id])
+        self.client.login(username="musicianuser", password="pass123")
+        self.assertJsonError(self.client.post(url, data='{"message": "hi"}', content_type="application/json"), 403)
+        self.client.login(username="banduser", password="pass123")
+        self.assertJsonError(self.client.post(url, data='{"message": " "}', content_type="application/json"), 400)
+        self.assertJsonError(self.client.get(url), 405)
+        self.client.post(url, data='{"message": "hi"}', content_type="application/json")
+        self.assertJsonError(self.client.post(url, data='{"message": "again"}', content_type="application/json"), 400)
+
+    def test_send_interest_missing_musician_is_json_404(self):
+        self.client.login(username="banduser", password="pass123")
+        response = self.client.post(reverse('gigs:send_interest', args=[999999]),
+                                    data='{"message": "hi"}', content_type="application/json")
+        self.assertJsonError(response, 404, 'not_found')
+
+    def test_delete_interest_errors(self):
+        self.client.login(username="musicianuser", password="pass123")
+        self.assertJsonError(self.client.post(reverse('gigs:delete_interest', args=[999999])), 404, 'not_found')
+        self.assertJsonError(self.client.get(reverse('gigs:delete_interest', args=[999999])), 405)
+        self.client.login(username="banduser", password="pass123")
+        self.assertJsonError(self.client.post(reverse('gigs:delete_interest', args=[999999])), 404, 'not_found')
+
+    def test_delete_account_get_is_405(self):
+        self.client.login(username="musicianuser", password="pass123")
+        self.assertJsonError(self.client.get(reverse('gigs:delete_account')), 405)
