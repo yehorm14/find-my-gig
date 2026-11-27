@@ -55,7 +55,7 @@ class ProfileUpdateTests(ViewBaseTestCase):
     def test_valid_musician_edit_saves_everything_and_keeps_existing_links(self):
         self.client.login(username="musicianuser", password="pass123")
         response = self.post_json(self.musician_payload(media_links=['https://example.com/new']))
-        self.assertEqual(response.json(), {'success': True})
+        self.assertEqual(response.json(), {'success': True, 'media_links': [{'id': MediaLink.objects.get(url='https://example.com/new').id, 'url': 'https://example.com/new'}]})
         self.musician_user.refresh_from_db()
         self.musician.refresh_from_db()
         self.assertEqual(self.musician_user.first_name, 'Mu')
@@ -217,7 +217,7 @@ class ProfileUpdateTests(ViewBaseTestCase):
         from unittest import mock
         self.client.login(username="musicianuser", password="pass123")
         before = self.snapshot()
-        with mock.patch('gigs.views.MediaLink.objects.bulk_create', side_effect=RuntimeError('boom')):
+        with mock.patch('gigs.views.MediaLink.objects.create', side_effect=RuntimeError('boom')):
             with self.assertRaises(RuntimeError):
                 self.post_json(self.musician_payload(username='renamed', about='Changed',
                                                      media_links=['https://example.com/new'],

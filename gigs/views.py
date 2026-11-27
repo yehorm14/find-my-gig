@@ -9,6 +9,7 @@ from django.http import JsonResponse
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.core.paginator import Paginator
 from django.db.models import Prefetch
 from django.utils import timezone
 from django.contrib.auth import login, logout
@@ -52,6 +53,21 @@ def home(request):
     return render(request, 'gigs/home.html', context)
 
 
+LIST_PAGE_SIZE = 20
+
+
+def paginate_list(request, queryset):
+    """
+    Returns (page, query_string) for a list view: the requested page of the
+    queryset, and the current GET parameters minus 'page' so the template can
+    keep filters and sort in its page links.
+    """
+    page = Paginator(queryset, LIST_PAGE_SIZE).get_page(request.GET.get('page'))
+    params = request.GET.copy()
+    params.pop('page', None)
+    return page, params.urlencode()
+
+
 def gig_listings(request):
     """
     Handles the main Gig list page with dropdown filtering and sorting.
@@ -82,10 +98,12 @@ def gig_listings(request):
 
     # Apply sorting
     if sort_by == 'name':
-        gigs_queryset = gigs_queryset.order_by('title')
+        gigs_queryset = gigs_queryset.order_by('title', 'id')
     else:
-        gigs_queryset = gigs_queryset.order_by('deadline') 
+        gigs_queryset = gigs_queryset.order_by('deadline', 'id')
     
+    gigs_page, page_query = paginate_list(request, gigs_queryset)
+
     # Track user interactions if logged in
     applied_gig_ids = []
     accepted_gig_ids = []
@@ -97,7 +115,9 @@ def gig_listings(request):
         bookmarked_gig_ids = request.user.saved_gigs.values_list('id', flat=True)
 
     context = {
-        'gigs': gigs_queryset,
+        'gigs': gigs_page,
+        'page_obj': gigs_page,
+        'page_query': page_query,
         'applied_gig_ids': applied_gig_ids,
         'accepted_gig_ids': accepted_gig_ids,
         'selected_instrument': instrument_filter,
@@ -143,9 +163,12 @@ def musicians_list(request):
     
     if instrument_filter:
         musicians = musicians.filter(instruments__icontains=instrument_filter)
-        
+
+    musicians_page, page_query = paginate_list(request, musicians.order_by('id'))
     return render(request, 'gigs/musicians_list.html', {
-        'musicians': musicians, 
+        'musicians': musicians_page,
+        'page_obj': musicians_page,
+        'page_query': page_query,
         'selected_instrument': instrument_filter
     })
 
@@ -172,8 +195,12 @@ def bands_list(request):
     """
     Shows the page for browsing all registered bands.
     """
-    bands = Band.objects.all()
-    return render(request, 'gigs/bands_list.html', {'bands': bands})
+    bands_page, page_query = paginate_list(request, Band.objects.order_by('id'))
+    return render(request, 'gigs/bands_list.html', {
+        'bands': bands_page,
+        'page_obj': bands_page,
+        'page_query': page_query,
+    })
 
 
 def band_detail(request, id):
@@ -382,6 +409,8 @@ def update_profile(request):
     and media link changes are saved in one transaction. On invalid input nothing
     is changed and the response carries per-field errors:
     {'success': False, 'error': 'invalid' | 'username_taken', 'errors': {field: [messages]}}
+    On success the links created this request are returned, in submitted order, as
+    {'success': True, 'media_links': [{'id': ..., 'url': ...}]}
     """
     if request.method != 'POST':
         return redirect('gigs:my_profile')
@@ -440,9 +469,9 @@ def update_profile(request):
                 # alongside the existing ones.
                 if cleaned['delete_media']:
                     MediaLink.objects.filter(musician=profile, id__in=cleaned['delete_media']).delete()
-                MediaLink.objects.bulk_create(
-                    [MediaLink(musician=profile, url=url) for url in cleaned['media_links']]
-                )
+                # Created one by one so each new link's id can be returned to the page.
+                saved_links = [MediaLink.objects.create(musician=profile, url=url)
+                               for url in cleaned['media_links']]
             else:
                 profile = user.band
                 profile.bio = cleaned['about']
@@ -451,13 +480,14 @@ def update_profile(request):
                 if cleaned['profile_picture']:
                     profile.profile_picture = cleaned['profile_picture']
                 profile.save()
+                saved_links = []
     except IntegrityError:
         # Lost a race for the username between validation and saving.
         return JsonResponse({'success': False, 'error': 'username_taken',
                              'errors': {'username': ['That username is already taken.']}},
                             status=400)
 
-    return json_success()
+    return json_success(media_links=[{'id': link.id, 'url': link.url} for link in saved_links])
 
 
 @login_required

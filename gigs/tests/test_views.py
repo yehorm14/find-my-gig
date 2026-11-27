@@ -419,3 +419,48 @@ class PastGigTests(ViewBaseTestCase):
     def test_applying_on_deadline_day_allowed(self):
         self.client.login(username='musicianuser', password='pass123')
         self.assertTrue(self.client.post(reverse('gigs:apply_gig', args=[self.today.id])).json()['success'])
+
+
+class PaginationTests(ViewBaseTestCase):
+    """Gig, musician and band lists show 20 per page and keep filters in page links."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.deadline = timezone.localdate() + timedelta(days=14)
+        for i in range(24):  # 25 gigs, 25 musicians, 25 bands in total
+            Listing.objects.create(
+                band=cls.band, title=f"Gig {i:02d}", deadline=cls.deadline,
+                is_urgent=False, description="d", location="Glasgow", req_instruments="Guitar")
+            user = User.objects.create_user(username=f"m{i:02d}", password="pass123")
+            Musician.objects.create(user=user, bio="b", age=20, instruments="Guitar", location="Glasgow")
+            buser = User.objects.create_user(username=f"b{i:02d}", password="pass123")
+            Band.objects.create(user=buser, name=f"Band {i:02d}", location="Glasgow", bio="b")
+
+    def test_page_boundaries(self):
+        for name, key in [('gig_listings', 'gigs'), ('musicians_list', 'musicians'), ('bands_list', 'bands')]:
+            with self.subTest(view=name):
+                url = reverse(f'gigs:{name}')
+                self.assertEqual(len(self.client.get(url).context[key]), 20)
+                self.assertEqual(len(self.client.get(url, {'page': 2}).context[key]), 5)
+                # Out-of-range and malformed pages fall back instead of erroring
+                self.assertEqual(self.client.get(url, {'page': 99}).context[key].number, 2)
+                self.assertEqual(self.client.get(url, {'page': 'abc'}).context[key].number, 1)
+
+    def test_gig_page_links_keep_filters_and_sort(self):
+        response = self.client.get(reverse('gigs:gig_listings'),
+                                  {'instrument': 'Guitar', 'sort': 'name', 'date': self.deadline.isoformat(), 'show_past': '1'})
+        self.assertEqual(len(response.context['gigs']), 20)
+        self.assertContains(response, f'?instrument=Guitar&amp;sort=name&amp;date={self.deadline}&amp;show_past=1&amp;page=2')
+        page2 = self.client.get(reverse('gigs:gig_listings'),
+                                {'instrument': 'Guitar', 'sort': 'name', 'date': self.deadline.isoformat(), 'show_past': '1', 'page': 2})
+        self.assertEqual(len(page2.context['gigs']), 4)
+        self.assertContains(page2, f'instrument=Guitar&amp;sort=name&amp;date={self.deadline}&amp;show_past=1&amp;page=1')
+
+    def test_musician_page_link_keeps_filter(self):
+        response = self.client.get(reverse('gigs:musicians_list'), {'instrument': 'Guitar'})
+        self.assertContains(response, '?instrument=Guitar&amp;page=2')
+
+    def test_no_pagination_nav_when_one_page(self):
+        response = self.client.get(reverse('gigs:gig_listings'), {'instrument': 'Drums'})
+        self.assertNotContains(response, 'Page navigation')
